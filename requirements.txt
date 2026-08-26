@@ -1,0 +1,5 @@
+numerapi==3.1.1
+pandas
+pyarrow
+jupyter
+matplotlib

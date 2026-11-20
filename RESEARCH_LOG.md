@@ -198,3 +198,92 @@ The final fold contains only 23 eras and should therefore be interpreted with ad
 Retain the Small walk-forward result as an infrastructure validation and reference benchmark.
 
 Next, evaluate the Medium 780-feature benchmark under the same walk-forward framework to test whether the stronger feature set improves performance stability, particularly in later eras.
+
+## Medium Feature Set Walk-Forward Experiment
+
+### Change
+
+Evaluated the Numerai Medium feature set containing 780 features using the same expanding walk-forward framework and baseline LightGBM configuration used for the Small benchmark.
+
+The only major experimental change was:
+
+- Small feature set: 42 features
+- Medium feature set: 780 features
+
+Model configuration remained unchanged:
+
+- LightGBM
+- `n_estimators = 300`
+- `learning_rate = 0.05`
+- `num_leaves = 31`
+- `random_state = 42`
+
+### Result
+
+Fold-level performance:
+
+| Fold | Validation Eras | Small Mean CORR | Medium Mean CORR | Medium Sharpe-like | Medium Positive Era Rate |
+|---|---|---:|---:|---:|---:|
+| 1 | 0575–0730 | 0.02331 | 0.02597 | 2.047 | 96.79% |
+| 2 | 0731–0886 | 0.02107 | 0.03599 | 2.168 | 99.36% |
+| 3 | 0887–1042 | 0.01793 | 0.02830 | 2.324 | 97.44% |
+| 4 | 1043–1198 | 0.01303 | 0.01566 | 1.039 | 82.05% |
+| 5 | 1199–1221 | 0.00885 | 0.02646 | 2.475 | 100.00% |
+
+Combined out-of-sample performance across all 647 validation eras:
+
+| Metric | Small 42 | Medium 780 |
+|---|---:|---:|
+| Mean CORR | 0.01848 | 0.02648 |
+| CORR Std | 0.01443 | 0.01580 |
+| Median CORR | 0.01898 | 0.02601 |
+| Sharpe-like | 1.281 | 1.676 |
+| Positive Era Rate | 90.26% | 94.13% |
+| Minimum CORR | -0.03001 | -0.02512 |
+| Maximum CORR | 0.06278 | 0.07267 |
+
+The Medium feature set improved overall Mean CORR by approximately 43% relative to the Small feature benchmark.
+
+### Conclusion
+
+The Medium feature set provides substantially stronger and more robust predictive performance than the Small feature set under expanding walk-forward validation.
+
+The improvement is particularly large in Folds 2, 3, and 5.
+
+Unlike the Small benchmark, which showed a nearly monotonic decline across later folds, the Medium benchmark recovered strongly in Fold 5. This suggests that the deterioration observed with the Small feature set was not simply an unavoidable decline in predictability over time.
+
+However, Fold 4 remains substantially weaker for both Small and Medium feature sets. This suggests the existence of a more difficult historical regime or distribution shift during eras 1043–1198.
+
+The cause has not yet been identified. Possible explanations include:
+
+- market regime changes
+- feature distribution shifts
+- target relationship changes
+- reduced effectiveness of long expanding training history
+- changes in which features carry predictive information
+
+No specific real-world market event is currently assigned to Fold 4 because the era-to-calendar mapping has not yet been verified.
+
+### Decision
+
+Promote the Medium 780-feature model to the current walk-forward benchmark.
+
+Current benchmark:
+
+- Feature set: Medium 780
+- Model: LightGBM
+- Mean walk-forward CORR: 0.02648
+- Sharpe-like: 1.676
+- Positive era rate: 94.13%
+
+The next research stage will focus on feature research and selection.
+
+The goal is to identify features that are:
+
+- predictive
+- stable across eras
+- robust across regimes
+- non-redundant
+- useful across multiple model classes
+
+Candidate feature sets will first be evaluated using fixed validation. Only promising candidates will proceed to the more expensive walk-forward evaluation.

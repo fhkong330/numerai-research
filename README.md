@@ -188,6 +188,20 @@ This allows experiments to be compared without relying only on notebook state.
 - [`DATA_GUIDE.md`](DATA_GUIDE.md) — dataset structure, features, targets, and validation design
 - [`RESEARCH_LOG.md`](RESEARCH_LOG.md) — experiment results, conclusions, and research decisions
 
+## Current Benchmark
+
+The current walk-forward benchmark uses the Numerai Medium feature set with 780 features and the baseline LightGBM configuration.
+
+Across 647 out-of-sample validation eras, the expanding walk-forward evaluation achieved:
+
+- Mean CORR: 0.02648
+- Sharpe-like ratio: 1.676
+- Positive era rate: 94.13%
+
+Compared with the 42-feature Small benchmark, the Medium feature set improved overall walk-forward Mean CORR from 0.01848 to 0.02648.
+
+The next research stage focuses on feature quality, stability, redundancy, and model-feature interactions.
+
 ## Current Direction
 
 The current focus is improving cross-sectional predictive performance and robustness through:

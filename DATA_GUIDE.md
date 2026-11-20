@@ -168,6 +168,26 @@ For later folds, validation eras from earlier periods become part of the histori
 
 Overall walk-forward metrics are calculated by combining all out-of-sample era correlations before computing summary statistics. Fold means are not equally averaged because the final fold contains only 23 eras.
 
+### Walk-Forward Interpretation
+
+Walk-forward performance should be evaluated both overall and by individual fold.
+
+The current Medium-feature benchmark shows meaningful variation across historical periods:
+
+| Fold | Validation Eras | Mean CORR |
+|---|---|---:|
+| 1 | 0575–0730 | 0.02597 |
+| 2 | 0731–0886 | 0.03599 |
+| 3 | 0887–1042 | 0.02830 |
+| 4 | 1043–1198 | 0.01566 |
+| 5 | 1199–1221 | 0.02646 |
+
+Fold 4 is materially weaker than the surrounding periods.
+
+A similar deterioration is also observed in the Small feature benchmark, suggesting that this period may represent a more difficult predictive regime rather than a weakness unique to the Medium feature set.
+
+No specific real-world market event is currently assigned to these eras because the era-to-calendar mapping has not yet been verified.
+
 ---
 
 ## 5. features.json

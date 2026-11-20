@@ -14,9 +14,11 @@ Main local files:
 
 | File | Purpose |
 |---|---|
-| `train.parquet` | Historical training data |
-| `validation.parquet` | Validation and final test data |
-| `features.json` | Feature-set metadata |
+| `data/v5.3/train.parquet` | Historical training data |
+| `data/v5.3/validation.parquet` | Validation and final test data |
+| `data/v5.3/features.json` | Feature-set metadata |
+
+The active dataset version is centralized in `src/config.py`, and version-aware paths are resolved by `src/paths.py`. V5.3 now resolves to `data/v5.3/` and `outputs/v5.3/`. Verified original files remain temporarily at the legacy flat paths, while other dataset versions never fall back to those v5.3 files.
 
 The dataset is organized by **era**.
 
@@ -28,7 +30,7 @@ Each era represents a weekly cross-sectional snapshot containing many anonymous 
 
 File:
 
-`data/train.parquet`
+`data/v5.3/train.parquet`
 
 ### Basic Information
 
@@ -77,7 +79,7 @@ Each row represents one anonymous security within one era.
 
 File:
 
-`data/validation.parquet`
+`data/v5.3/validation.parquet`
 
 ### Full File
 

@@ -1,4 +1,7 @@
 # Data configuration
+DATASET_VERSION = "v5.3"
+SUPPORTED_DATASET_VERSIONS = ("v5.3", "v6.0")
+
 PURGE_ERAS = 16
 TARGET_COLUMN = "target"
 DEFAULT_FEATURE_SET = "medium"

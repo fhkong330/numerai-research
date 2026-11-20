@@ -22,9 +22,10 @@ The final test set is kept untouched during model development and is reserved fo
 ```text
 numerai-research/
 ├── data/
-│   ├── train.parquet
-│   ├── validation.parquet
-│   └── features.json
+│   └── v5.3/
+│       ├── train.parquet
+│       ├── validation.parquet
+│       └── features.json
 │
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
@@ -43,12 +44,17 @@ numerai-research/
 │   └── validation.py
 │
 ├── outputs/
-│   ├── experiments/
-│   └── model_experiments/
+│   └── v5.3/
+│       ├── experiments/
+│       └── model_experiments/
 │
 ├── tests/
 │
-├── DATA_GUIDE.md
+├── docs/
+│   ├── data/
+│   │   └── DATA_GUIDE_v5.3.md
+│   └── manifests/
+│       └── v5.3_preservation.json
 ├── RESEARCH_LOG.md
 ├── README.md
 └── requirements.txt
@@ -60,13 +66,15 @@ The project currently uses Numerai dataset version **v5.3**.
 
 Main local data files:
 
-- `train.parquet` — historical training data
-- `validation.parquet` — validation and test data
-- `features.json` — Numerai feature-set definitions
+- `data/v5.3/train.parquet` — historical training data
+- `data/v5.3/validation.parquet` — validation and test data
+- `data/v5.3/features.json` — Numerai feature-set definitions
 
 Large datasets and generated outputs are stored locally and are not tracked by Git.
 
-See [`DATA_GUIDE.md`](DATA_GUIDE.md) for detailed information about the dataset, feature sets, targets, eras, and validation splits.
+Dataset selection is centralized in `src/config.py`. Active v5.3 paths now resolve to `data/v5.3/` and `outputs/v5.3/`. The verified original files remain temporarily in the flat `data/` and `outputs/` locations; other versions, including v6.0, resolve only to their own versioned directories and never fall back to those legacy files.
+
+See the [`v5.3 Data Guide`](docs/data/DATA_GUIDE_v5.3.md) for detailed information about the dataset, feature sets, targets, eras, and validation splits.
 
 ## Modeling
 
@@ -80,7 +88,7 @@ The modeling pipeline separates reusable functionality into dedicated modules:
 - `validation.py` — walk-forward fold generation and data splitting
 - `pipeline.py` — experiment orchestration and result persistence
 - `config.py` — shared research and model configuration
-- `paths.py` — centralized project paths
+- `paths.py` — centralized, version-aware project paths
 
 This keeps the notebooks focused on research and analysis while reusable logic remains in `src/`.
 
@@ -171,7 +179,7 @@ Live
 
 Shared settings such as model parameters, purge length, target configuration, and walk-forward window length are centralized in `src/config.py`.
 
-Project paths are centralized in `src/paths.py`.
+Project paths are centralized in `src/paths.py`, with isolated resolution for each supported dataset version.
 
 Experiment outputs can include:
 
@@ -185,12 +193,14 @@ This allows experiments to be compared without relying only on notebook state.
 ## Documentation
 
 - [`README.md`](README.md) — project overview and workflow
-- [`DATA_GUIDE.md`](DATA_GUIDE.md) — dataset structure, features, targets, and validation design
+- [`DATA_GUIDE_v5.3.md`](docs/data/DATA_GUIDE_v5.3.md) — v5.3 dataset structure, features, targets, and validation design
 - [`RESEARCH_LOG.md`](RESEARCH_LOG.md) — experiment results, conclusions, and research decisions
+
+Each dataset version has a separate Data Guide so its historical schema and research assumptions remain preserved.
 
 ## Current Benchmark
 
-The current walk-forward benchmark uses the Numerai Medium feature set with 780 features and the baseline LightGBM configuration.
+The historical v5.3 walk-forward benchmark uses the Numerai Medium feature set with 780 features and the baseline LightGBM configuration.
 
 Across 647 out-of-sample validation eras, the expanding walk-forward evaluation achieved:
 

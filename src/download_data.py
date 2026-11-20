@@ -1,23 +1,23 @@
-from pathlib import Path
-
 from numerapi import NumerAPI
+
+from src.config import DATASET_VERSION
+from src.paths import DATA_DIR
 
 
 def main() -> None:
-    data_dir = Path(__file__).resolve().parent.parent / "data"
-    data_dir.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     api = NumerAPI()
 
     datasets = [
-        "v5.3/train.parquet",
-        "v5.3/validation.parquet",
-        "v5.3/features.json",
+        f"{DATASET_VERSION}/train.parquet",
+        f"{DATASET_VERSION}/validation.parquet",
+        f"{DATASET_VERSION}/features.json",
     ]
 
     for dataset in datasets:
         filename = dataset.split("/")[-1]
-        file_path = data_dir / filename
+        file_path = DATA_DIR / filename
 
         if file_path.exists():
             print(f"Skipping {filename}: already exists.")

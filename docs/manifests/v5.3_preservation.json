@@ -1,0 +1,86 @@
+{
+  "manifest_version": 1,
+  "dataset_version": "v5.3",
+  "source_git_commit": "045979e04dfc545a783cf439cdad3b2f874244a7",
+  "inventory_summary": {
+    "file_count": 9,
+    "dataset_file_count": 3,
+    "artifact_file_count": 6,
+    "dataset_size_bytes": 8927761924,
+    "artifact_size_bytes": 2659713,
+    "total_size_bytes": 8930421637
+  },
+  "datasets": [
+    {
+      "relative_path": "data/train.parquet",
+      "file_type": "Apache Parquet",
+      "size_bytes": 3296841026,
+      "sha256": "bae773ddd7eea6ed07c55d87b882cc061901abbb724972b2a630381417c328f8",
+      "parquet_metadata": {
+        "row_count": 2746268,
+        "column_count": 3599,
+        "row_group_count": 3
+      }
+    },
+    {
+      "relative_path": "data/validation.parquet",
+      "file_type": "Apache Parquet",
+      "size_bytes": 5630533749,
+      "sha256": "471d9cb7d6ab2897dd4a80446fefe98a2443604a037edd103a86772c028574b8",
+      "parquet_metadata": {
+        "row_count": 4128060,
+        "column_count": 3599,
+        "row_group_count": 4
+      }
+    },
+    {
+      "relative_path": "data/features.json",
+      "file_type": "JSON feature metadata",
+      "size_bytes": 387149,
+      "sha256": "27de6b598b0d479415dba8062d050fc190469776f9c905feea9ee3f2bdda3631"
+    }
+  ],
+  "artifacts": [
+    {
+      "relative_path": "outputs/experiments/pipeline_test/era_correlations.csv",
+      "file_type": "CSV era-correlation results",
+      "size_bytes": 17399,
+      "sha256": "bf184194cfa9687fe642ed5635ecb272f7d61e266ba8f530bb709f6e3a8a9958"
+    },
+    {
+      "relative_path": "outputs/experiments/pipeline_test/model.txt",
+      "file_type": "LightGBM text model",
+      "size_bytes": 954078,
+      "sha256": "15e19ab5c1021723333febadbe3977de4535361190d94aab0535e3381771e85b"
+    },
+    {
+      "relative_path": "outputs/experiments/pipeline_test/summary.json",
+      "file_type": "JSON experiment summary",
+      "size_bytes": 1095,
+      "sha256": "548eb36540e64b7624ab12720d5a7f10dd8f00412f877933c51f30eab5141461"
+    },
+    {
+      "relative_path": "outputs/model_experiments/v2_era_corr.csv",
+      "file_type": "CSV era-correlation results",
+      "size_bytes": 17350,
+      "sha256": "151a49457dbfd0133d68befaa0e6cf791b0896810b8e9c55be2434934a8d8790"
+    },
+    {
+      "relative_path": "outputs/model_experiments/v2_lightgbm.txt",
+      "file_type": "LightGBM text model",
+      "size_bytes": 1669324,
+      "sha256": "e868cb5435611eebf75546794b3c5e5c68a7439b922757cd66f6a07eb19c6acf"
+    },
+    {
+      "relative_path": "outputs/model_experiments/v2_summary.json",
+      "file_type": "JSON experiment summary",
+      "size_bytes": 467,
+      "sha256": "0a95c8fcb26c263f20c0ba3f63413ad18f6a35ef33edd888dfd76bbbd5f5f4c2"
+    }
+  ],
+  "notes": [
+    "The synthetic outputs/experiments/test_save fixture is not included because it is not a substantive research experiment.",
+    "Historical Small and Medium walk-forward predictions and complete walk-forward experiment artifacts were not saved; their results are preserved only in project documentation.",
+    "This manifest records the original pre-migration relative paths."
+  ]
+}

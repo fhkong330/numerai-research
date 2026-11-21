@@ -287,3 +287,35 @@ The goal is to identify features that are:
 - useful across multiple model classes
 
 Candidate feature sets will first be evaluated using fixed validation. Only promising candidates will proceed to the more expensive walk-forward evaluation.
+
+---
+
+## 2026-11-21 — v6 Research Validation Protocol
+
+### Decision
+
+Approved and implemented the leakage-safe data boundaries and fold-generation protocol for the Numerai v6.0 V1 research workflow.
+
+- Explicit target: `target_jupiter_60`
+- Time column: weekly `date`, ordered by observed values
+- Expanding training history
+- Purge: 16 observed dates before every validation window
+- Validation window: 78 dates
+- Research validation: 2019-01-04–2025-04-25
+- Final holdout gap: 2025-05-02–2025-08-15
+- Sealed final holdout: 2025-08-22–2026-08-14
+- Immature dates: 2026-08-21–2026-11-13
+
+The five research folds contain 78, 78, 78, 78, and 18 validation dates. The final partial fold is retained.
+
+### Rationale and Leakage Safeguards
+
+The 16-date purge prevents training labels immediately before a validation window from overlapping its forward-return period. The same 16-date separation is reserved before the sealed holdout. Ordinary research loaders expose target values only for historical training and approved research-validation dates; gap, holdout, and immature partitions remain outside research history.
+
+The implementation uses explicit, snapshot-fixed date boundaries. Missing dates, unexpected added dates, changed `data_type` assignments, and null Jupiter-60 labels inside approved research history cause verification to fail rather than silently changing the experiment.
+
+Row identity (`numerai_ticker`, `composite_figi`, and `date`) is retained for future out-of-fold prediction alignment.
+
+### Status
+
+No v6 model has been trained, no feature selection has been performed, and no v6 holdout target has been evaluated. Historical v5.3 results remain the only model benchmarks in this log.

@@ -1,6 +1,6 @@
 # Local datasets and generated outputs
-data/
-outputs/
+/data/
+/outputs/
 
 # Environment files and secrets
 .env

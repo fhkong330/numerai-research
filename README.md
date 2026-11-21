@@ -52,7 +52,8 @@ numerai-research/
 │
 ├── docs/
 │   ├── data/
-│   │   └── DATA_GUIDE_v5.3.md
+│   │   ├── DATA_GUIDE_v5.3.md
+│   │   └── DATA_GUIDE_v6.0.md
 │   └── manifests/
 │       └── v5.3_preservation.json
 ├── RESEARCH_LOG.md
@@ -62,7 +63,7 @@ numerai-research/
 
 ## Data
 
-The project currently uses Numerai dataset version **v5.3**.
+The historical benchmark uses Numerai dataset version **v5.3**. The explicitly selectable v6.0 research workflow is configured for split and fold verification, but no v6 model result exists yet.
 
 Main local data files:
 
@@ -73,6 +74,30 @@ Main local data files:
 Large datasets and generated outputs are stored locally and are not tracked by Git.
 
 Dataset selection is centralized in `src/config.py`. Active v5.3 paths now resolve to `data/v5.3/` and `outputs/v5.3/`. The verified original files remain temporarily in the flat `data/` and `outputs/` locations; other versions, including v6.0, resolve only to their own versioned directories and never fall back to those legacy files.
+
+Download files explicitly from the repository root by selecting both a version and one or more files:
+
+```powershell
+python -m src.download_data --version v6.0 --file v6.0/features.json
+```
+
+Repeat `--file` to request multiple files. The downloader accepts only files in the verified catalog for the selected version, stores them under `data/<version>/`, and skips existing destinations without overwriting them. It never downloads every available file implicitly.
+
+Audit the local v6.0 schema and temporal structure without loading every feature and target at once:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.audit_data --version v6.0
+```
+
+The audit saves a machine-readable report under `outputs/v6.0/data_audit/` and refuses to overwrite an existing report.
+
+Verify the approved v6 research partitions and five walk-forward folds using only local date and split columns:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.validation --version v6.0
+```
+
+The v6 configuration selects `target_jupiter_60`, weekly `date` values, a 16-observed-date purge, and 78-date validation windows. Selection is explicit through `--version v6.0`; the historical v5.3 default remains unchanged for compatibility.
 
 See the [`v5.3 Data Guide`](docs/data/DATA_GUIDE_v5.3.md) for detailed information about the dataset, feature sets, targets, eras, and validation splits.
 
@@ -93,6 +118,23 @@ The modeling pipeline separates reusable functionality into dedicated modules:
 This keeps the notebooks focused on research and analysis while reusable logic remains in `src/`.
 
 ## Validation
+
+### v6.0 Research Validation
+
+The approved v6.0 V1 protocol uses:
+
+- Explicit target: `target_jupiter_60`
+- Research validation: 2019-01-04–2025-04-25
+- Expanding training windows
+- 16 observed weekly dates purged before every validation window
+- Four 78-date validation folds plus one final 18-date partial fold
+- Final holdout gap: 2025-05-02–2025-08-15
+- Sealed final holdout: 2025-08-22–2026-08-14
+- Immature dates excluded: 2026-08-21–2026-11-13
+
+Ordinary research history excludes the gap, holdout, and immature dates. Approved date coverage is fixed to the current snapshot and verification fails rather than silently shifting boundaries.
+
+The sections below describe the preserved historical v5.3 workflow.
 
 ### Fixed Validation
 
@@ -194,11 +236,12 @@ This allows experiments to be compared without relying only on notebook state.
 
 - [`README.md`](README.md) — project overview and workflow
 - [`DATA_GUIDE_v5.3.md`](docs/data/DATA_GUIDE_v5.3.md) — v5.3 dataset structure, features, targets, and validation design
+- [`DATA_GUIDE_v6.0.md`](docs/data/DATA_GUIDE_v6.0.md) — verified v6.0 metadata, schema, temporal structure, splits, target availability, and selected feature missingness
 - [`RESEARCH_LOG.md`](RESEARCH_LOG.md) — experiment results, conclusions, and research decisions
 
 Each dataset version has a separate Data Guide so its historical schema and research assumptions remain preserved.
 
-## Current Benchmark
+## Historical v5.3 Benchmark
 
 The historical v5.3 walk-forward benchmark uses the Numerai Medium feature set with 780 features and the baseline LightGBM configuration.
 

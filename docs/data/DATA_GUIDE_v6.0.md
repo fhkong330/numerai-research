@@ -296,7 +296,7 @@ Research OOF artifacts contain `date`, `numerai_ticker`, `composite_figi`, `fold
 
 Scores are first calculated cross-sectionally per date. Overall mean, standard deviation, Sharpe-like ratio, and positive-date percentage are then computed across the 330 date scores. Per-fold and per-year summaries are derived from the same per-date series; overall results never average the five fold means equally.
 
-No real v6 OOF predictions, neutral scores, or performance metrics have been generated.
+The first real v6 OOF baseline is recorded below. No holdout score, NMMC, or NBMC has been generated.
 
 ## Approved V1 Research Validation Protocol
 
@@ -335,8 +335,8 @@ Known limitations:
 - The approved boundaries are snapshot-specific and intentionally fail verification when the file date coverage changes.
 - The 16-date purge is configured for Jupiter-60 and must be reconsidered for another target horizon.
 - The short final fold contributes only 18 dates and should not receive equal fold weight in aggregate evaluation.
-- No v6 model, feature selection, or holdout evaluation has been run.
-- The reusable LightGBM, OOF evaluation, and artifact interfaces have been tested only on synthetic data; full v6 walk-forward fitting and populated experiment artifacts remain future work.
+- One real v6 Medium LightGBM baseline has run; no feature selection, model comparison, tuning, or holdout evaluation has been performed.
+- The reusable interfaces have synthetic coverage and one completed real walk-forward baseline; broader model and feature comparisons remain future work.
 
 ## Integrated Research Data Flow
 
@@ -354,6 +354,31 @@ The historical and research frames are loaded once with 350 features rather than
 Ordinary loaders never expose gap, sealed-holdout, or immature target data to this pipeline. OOF validation rejects any such date. The real CLI additionally requires the explicit `--run --confirm-full-run` pair, while `--smoke` uses synthetic data only.
 
 Completed experiments contain configuration, ordered features, fold boundaries, OOF predictions, per-date NCORR and Legacy CORR, aggregate/fold metrics, five LightGBM text models, scoring-reference identities, and a final `COMPLETED.json` marker. Existing experiment directories are never overwritten. Interrupted directories without the marker are rejected by the artifact loader.
+
+## First Real v6 Baseline
+
+Experiment `v6_medium_baseline_001` completed on 2026-11-21 using exactly the documented configuration:
+
+- Dataset: `v6.0`
+- Features: official Medium set, 350 numeric columns in metadata order
+- Target: `target_jupiter_60`
+- Model: baseline LightGBM (`n_estimators=300`, `learning_rate=0.05`, `num_leaves=31`, `random_state=42`, `n_jobs=-1`)
+- Validation: five approved expanding folds, 16 observed-date purge, 330 OOF dates
+- Scoring: NCORR / `neutral_corr` v1 plus separately named Legacy CORR
+- Neutralizer SHA-256: `1ae870b17d501b8d9ec114ab2096eece342812c424a826f44a772087a82c6c6f`
+
+Verification found 2,180,295 OOF rows from 2019-01-04 through 2025-04-25, with no duplicate identities, missing predictions, or gap/holdout/immature dates. The five expanding training sets contained 4,227,405; 4,715,780; 5,231,777; 5,767,397; and 6,284,208 rows.
+
+The run took approximately 18 minutes wall-clock. The pipeline did not instrument exact fold or scoring durations. Model serialization timestamps show increasing intervals as training expanded, and the final NCORR plus artifact phase took several minutes. Windows process isolation prevented a reliable peak-memory measurement. The run completed without memory errors; peak usage remains an explicit unknown for future operational profiling.
+
+Headline research results:
+
+| Metric | Mean | Std. dev. | Sharpe-like | Positive dates |
+|---|---:|---:|---:|---:|
+| NCORR | 0.026121 | 0.017981 | 1.4527 | 93.33% |
+| Legacy CORR | 0.022410 | 0.016756 | 1.3374 | 91.21% |
+
+These are Research Validation results, not sealed-holdout results. They must not be interpreted as evidence from the final holdout.
 
 ## Remaining Validation-Design Questions
 

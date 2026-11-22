@@ -437,3 +437,61 @@ The CLI separates `--smoke` from real execution. Smoke mode creates only synthet
 Permanent integration tests cover end-to-end train/predict/OOF/score/save/reload behavior, fold-to-row mapping, expanding training and 16-date purge, exclusion of same-fold validation rows from fitting, official NCORR integration and alignment safeguards, complete 330-date coverage, model persistence, CLI confirmation, and incomplete-run rejection. The full suite passed all 56 tests, including existing v5.3 compatibility coverage.
 
 No real five-fold v6 baseline was executed, no real OOF performance result was created, no feature selection or tuning occurred, and no holdout target was accessed.
+
+---
+
+## 2026-11-21 — First Real v6 Medium LightGBM Baseline
+
+### Hypothesis and configuration
+
+Hypothesis: the unchanged baseline LightGBM trained on the official v6 Medium numeric feature set should provide a reproducible, positive Research Validation reference for later feature and model comparisons.
+
+- Experiment ID: `v6_medium_baseline_001`
+- Dataset / target: `v6.0` / `target_jupiter_60`
+- Features: official Medium, 350 numeric features in metadata order
+- Model: LightGBM with `n_estimators=300`, `learning_rate=0.05`, `num_leaves=31`, `random_state=42`, `n_jobs=-1`
+- Validation: five approved expanding folds; 16 observed-date purge; validation windows 78/78/78/78/18 dates
+- Research OOF: 2019-01-04 through 2025-04-25, 330 dates and 2,180,295 rows
+- Official score: NCORR (`neutral_corr` version 1)
+- Diagnostic: `NUMERAI_CORR_JUPITER_60`, reported separately as Legacy CORR
+
+### Aggregate results
+
+| Metric | Mean | Std. dev. | Sharpe-like | Positive dates |
+|---|---:|---:|---:|---:|
+| NCORR | 0.026121 | 0.017981 | 1.4527 | 93.33% |
+| Legacy CORR | 0.022410 | 0.016756 | 1.3374 | 91.21% |
+
+### Fold results
+
+| Fold | Dates | Mean NCORR | Mean Legacy CORR |
+|---:|---:|---:|---:|
+| 1 | 78 | 0.025914 | 0.022606 |
+| 2 | 78 | 0.030107 | 0.025922 |
+| 3 | 78 | 0.027457 | 0.022189 |
+| 4 | 78 | 0.022474 | 0.019801 |
+| 5 | 18 | 0.019773 | 0.018609 |
+
+### Annual results
+
+| Year | Dates | Mean NCORR | NCORR Sharpe-like | Mean Legacy CORR | Legacy Sharpe-like |
+|---:|---:|---:|---:|---:|---:|
+| 2019 | 52 | 0.029578 | 1.9879 | 0.026000 | 1.9206 |
+| 2020 | 52 | 0.015034 | 1.0453 | 0.012424 | 0.9202 |
+| 2021 | 53 | 0.039307 | 2.6659 | 0.034121 | 2.7519 |
+| 2022 | 52 | 0.026913 | 1.7189 | 0.021799 | 1.5444 |
+| 2023 | 52 | 0.034795 | 2.0376 | 0.031205 | 1.8152 |
+| 2024 | 52 | 0.013239 | 1.0353 | 0.010261 | 0.8049 |
+| 2025 | 17 | 0.018805 | 0.8517 | 0.017599 | 0.8428 |
+
+### Runtime, verification, and interpretation
+
+The run took approximately 18 minutes wall-clock. Exact per-fold and scoring times were not instrumented. LightGBM reported normal row-wise threading selection and expanding training sizes of 4,227,405 to 6,284,208 rows. Peak memory could not be measured reliably because Windows process isolation blocked process sampling; no memory error occurred.
+
+Artifacts reloaded successfully with five models, the completion marker, the official NCORR identity and `numerai-tools==0.7.2`, and the verified neutralizer checksum. OOF verification found exactly 330 dates, no duplicate identities, no missing predictions, and no gap, holdout, or immature dates.
+
+NCORR exceeded Legacy CORR overall and in every fold. Performance was strongest in 2021 and 2023 and materially weaker in 2020, 2024, and the partial 2025 period. Fold means declined after Fold 2, with the short Fold 5 showing the lowest mean and positive-date rate; its 18-date size makes it less stable than the four full folds. The result is positive and reasonably consistent but clearly regime-sensitive.
+
+Limitations: this is repeated Research Validation rather than sealed-holdout evidence; no hyperparameter or feature comparison has yet been performed; the final fold is short; runtime components and peak memory were not instrumented; NMMC and NBMC remain unavailable.
+
+Next research questions should be reviewed before action: model-independent feature quality and stability, alternative baseline model families under the same folds, and whether carefully predeclared ensembling improves later-period robustness. No tuning or follow-on experiment was started in this task.

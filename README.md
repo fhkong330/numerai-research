@@ -177,7 +177,16 @@ The future real baseline command is shown for reproducibility but has **not** be
 .\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --experiment-id v6_medium_baseline_001 --run --confirm-full-run
 ```
 
-Both `--run` and `--confirm-full-run` are required. Outputs are non-overwriting, and only directories containing `COMPLETED.json` can be loaded as completed experiments. No real v6 five-fold baseline or OOF performance result exists yet.
+Both `--run` and `--confirm-full-run` are required. Outputs are non-overwriting, and only directories containing `COMPLETED.json` can be loaded as completed experiments.
+
+The first real v6 baseline, `v6_medium_baseline_001`, completed on 2026-11-21 with 2,180,295 OOF rows across all 330 Research Validation dates. Headline results were:
+
+| Metric | Mean | Std. dev. | Sharpe-like | Positive dates |
+|---|---:|---:|---:|---:|
+| NCORR (`neutral_corr` v1) | 0.02612 | 0.01798 | 1.4527 | 93.33% |
+| Legacy CORR (`NUMERAI_CORR_JUPITER_60`) | 0.02241 | 0.01676 | 1.3374 | 91.21% |
+
+Reproduce it with the real baseline command above. Local ignored artifacts are available at [`outputs/v6.0/experiments/v6_medium_baseline_001/`](outputs/v6.0/experiments/v6_medium_baseline_001/), including [`metadata.json`](outputs/v6.0/experiments/v6_medium_baseline_001/metadata.json) and [`metrics.json`](outputs/v6.0/experiments/v6_medium_baseline_001/metrics.json). These outputs are intentionally not committed.
 
 Future completed experiments can be saved without overwriting under:
 
@@ -195,7 +204,7 @@ Run the synthetic evaluation and artifact tests with:
 .\.venv\Scripts\python.exe -B -m unittest tests.test_evaluation -v
 ```
 
-No real v6 OOF predictions or experiment directory has been created yet.
+The real baseline above is the only completed v6 research experiment. No feature selection, tuning, model comparison, or holdout evaluation has been performed.
 
 The modeling pipeline separates reusable functionality into dedicated modules:
 

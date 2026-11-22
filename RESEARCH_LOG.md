@@ -319,3 +319,121 @@ Row identity (`numerai_ticker`, `composite_figi`, and `date`) is retained for fu
 ### Status
 
 No v6 model has been trained, no feature selection has been performed, and no v6 holdout target has been evaluated. Historical v5.3 results remain the only model benchmarks in this log.
+
+---
+
+## 2026-11-21 — Task 17A: Reusable v6 LightGBM Interface
+
+### Implementation
+
+Implemented the reusable model boundary required before v6 walk-forward orchestration:
+
+- Schema-backed resolution of official v6 feature sets
+- Initial `medium` policy: 351 metadata entries, excluding `feature_country`, resulting in 350 numeric features
+- Preservation of official feature ordering
+- Explicit separation of numeric features, `target_jupiter_60`, and row identity
+- Validation of missing, nonnumeric, duplicated, or reordered model features
+- Validation of null, nonnumeric, or length-mismatched training targets
+- Prediction output aligned to the supplied DataFrame index
+- Deterministic LightGBM behavior under the configured random seed
+
+The initial model parameters remain:
+
+- `n_estimators = 300`
+- `learning_rate = 0.05`
+- `num_leaves = 31`
+- `random_state = 42`
+- `n_jobs = -1`
+
+LightGBM retains native handling of numeric missing values. No imputation, normalization, target-driven feature selection, feature engineering, hyperparameter tuning, or validation-target early stopping was introduced.
+
+### Verification
+
+Permanent tests cover the official Medium resolution, numeric count and ordering, categorical exclusion, feature and target rejection cases, deterministic synthetic fitting, prediction alignment, v6 model-data separation, and legacy v5.3 model-function compatibility.
+
+Only tiny synthetic models were fitted for interface verification. No full v6 model, walk-forward run, OOF predictions, CORR/MMC metrics, model artifacts, or performance results exist yet.
+
+---
+
+## 2026-11-21 — Task 17B: v6 OOF Evaluation and Artifact Contracts
+
+### Official Scoring Verification
+
+Verified current Classic scoring against Numerai documentation, the public round-score configuration API, and the official `numerai-tools` 0.7.2 implementation. Public round 1404 configured:
+
+- NCORR (`neutral_corr` v1): payout, 8×
+- NMMC (`neutral_mmc` v1): payout, 32×
+- NBMC (`neutral_bmc` v1): informational, 0×
+- Canonical neutral companion series and `season_score`: informational, 0×
+
+NCORR requires the official v6 neutralizer matrix. NMMC additionally requires the matching historical `classic_v6_nuswmm_pow1` Meta Model. NBMC requires the exact shared v6 benchmark reference. None of these required reference inputs is currently available locally, and the Meta Model reference is not present in the verified v6 dataset catalog.
+
+No legacy CORR, MMC, benchmark prediction, or proxy has been substituted for a neutral metric.
+
+### Implementation
+
+Implemented a reusable research OOF contract with aligned `date`, `numerai_ticker`, `composite_figi`, fold, prediction, and Jupiter-60 target fields. Validation rejects duplicate identities, missing or nonfinite predictions, null targets, incomplete research-date coverage, incorrect fold assignments, and all gap/holdout/immature dates.
+
+Implemented `NUMERAI_CORR_JUPITER_60` using the exact official `numerai_corr` rank, gaussianization, signed-power, and Pearson-correlation formula. This is recorded only as a non-neutral historical research diagnostic, not as NCORR or a current payout score.
+
+Date-level aggregation provides overall, per-fold, and per-year summaries. Overall metrics operate over individual date scores, preventing the final 18-date fold from receiving the same weight as each 78-date fold.
+
+Implemented validated, non-overwriting experiment artifacts under `outputs/v6.0/experiments/<experiment_id>/`:
+
+- `metadata.json`
+- `metrics.json`
+- `oof_predictions.parquet`
+- `per_date_metrics.parquet`
+
+Metadata retains the ordered feature list, model parameters, target, exact folds and purge, random seed, metric identity, and Git state when available. No raw dataset copy or dummy model file is written.
+
+### Status
+
+All Task 17B verification uses synthetic predictions and targets. No full v6 training, five-fold run, holdout access, real OOF prediction, neutral metric, or performance result exists yet. NCORR, NMMC, and NBMC remain explicitly unavailable pending their exact official reference inputs and supported scoring dependency.
+
+---
+
+## 2026-11-21 — Task 17C: Official v6 Scoring References
+
+### Data acquisition and verification
+
+Downloaded only `v6.0/validation_neutralizer.parquet` through the reusable repository downloader. The 4,699,025,422-byte file has SHA-256 `1ae870b17d501b8d9ec114ab2096eece342812c424a826f44a772087a82c6c6f` and a readable footer containing 2,746,248 rows, 304 columns, and 411 row groups. Its schema has 300 float neutralizer columns plus the string fields `numerai_ticker`, `date`, `data_type`, and `composite_figi`.
+
+Added a reusable, target-free reference audit. It confirmed exact row-order alignment with Validation on `numerai_ticker`, `date`, and `composite_figi`, date coverage from 2019-01-04 through 2026-11-13, and coverage of all 330 approved Research Validation dates. No holdout target or score was read or calculated.
+
+### Reference availability decisions
+
+- NCORR: the official historical Validation neutralizer input is now local and verified; scoring remains unimplemented.
+- NMMC: the public v6 catalog has no `classic_v6_nuswmm_pow1` reference, and NumerAPI 3.1.1 exposes no supported public historical Meta Model retrieval method. No substitute is permitted.
+- NBMC: Validation benchmark-model data is catalogued, but the exact shared Classic v6 / Signals v3.1 reference column or blend is not documented. It was not downloaded or treated as the official benchmark.
+- Dependency: official `numerai-tools` 0.7.2 supports Python 3.12 and is compatible with the installed scientific package versions. It was not installed and project dependencies were not changed in this acquisition-only task.
+
+This entry records reference acquisition and engineering verification, not a model-performance experiment. No model was trained, no walk-forward run occurred, and no CORR, NCORR, NMMC, or NBMC value was calculated.
+
+---
+
+## 2026-11-21 — Task 17D: Official Classic v6 NCORR Scoring
+
+Installed and pinned the official `numerai-tools==0.7.2` dependency. Implemented NCORR with the package's `neutral_correlation` function, preserving the official `NCORR` / `neutral_corr` version-1 identity and explicit `target_jupiter_60` target.
+
+The reference loader reads one approved Research Validation date at a time from the 4.7 GB Validation neutralizer. It uses all 300 columns in verified order and requires exact alignment on `date`, `numerai_ticker`, and `composite_figi`. Missing, duplicate, reordered, unsupported, null, nonfinite, or degenerate inputs are rejected. Gap, sealed holdout, and immature dates are outside the accepted scoring dates.
+
+Synthetic tests compare the repository result directly with the installed official function at absolute tolerance `1e-12`, verify use of every supplied neutralizer column, exercise alignment and invalid-input safeguards, and verify per-date aggregation and experiment metadata. Future artifacts can store NCORR and the separately named Legacy CORR together, including package version, neutralizer version/checksum, and exact scoring coverage.
+
+NMMC remains unavailable without `classic_v6_nuswmm_pow1`; NBMC remains unavailable without an authoritative shared-benchmark mapping. Neither is approximated.
+
+This is scoring-infrastructure verification, not a performance experiment. No real v6 OOF predictions or NCORR values were generated, no five-fold walk-forward was run, and no holdout target was accessed.
+
+---
+
+## 2026-11-21 — Task 17E: Integrated v6 Walk-Forward Pipeline
+
+Integrated the existing v6 data, fold, model, OOF, NCORR, Legacy CORR, and artifact interfaces into one reproducible orchestration path. The pipeline resolves the official 350 numeric Medium features, loads only selected research columns, fits a fresh baseline LightGBM model for each approved expanding fold, preserves row identity and fold IDs, validates complete OOF coverage, and calculates the two metrics under distinct identities.
+
+Memory behavior is bounded by retaining only one fitted model and fold-specific matrices at a time. Models are serialized immediately, large fold objects are released, and the 4.7 GB neutralizer remains date-filtered. Peak memory for the real dataset has not yet been measured.
+
+The CLI separates `--smoke` from real execution. Smoke mode creates only synthetic approved-date data and records `run_kind: synthetic_smoke`; real execution requires both `--run` and `--confirm-full-run`. Artifact loading now requires a final completion marker, so interrupted output cannot be mistaken for a completed experiment. Completed artifacts support five fold-model files, exact configuration and folds, validated OOF predictions, date-level metrics, aggregate/fold summaries, and scoring-reference metadata.
+
+Permanent integration tests cover end-to-end train/predict/OOF/score/save/reload behavior, fold-to-row mapping, expanding training and 16-date purge, exclusion of same-fold validation rows from fitting, official NCORR integration and alignment safeguards, complete 330-date coverage, model persistence, CLI confirmation, and incomplete-run rejection. The full suite passed all 56 tests, including existing v5.3 compatibility coverage.
+
+No real five-fold v6 baseline was executed, no real OOF performance result was created, no feature selection or tuning occurred, and no holdout target was accessed.

@@ -5,3 +5,4 @@ jupyter
 matplotlib
 lightgbm
 scikit-learn
+numerai-tools==0.7.2

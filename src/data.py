@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from src.config import (
     DATASET_VERSION,
@@ -35,6 +37,13 @@ class V6PartitionIndices(V6ValidationPartitions):
     historical_training: pd.DataFrame
 
 
+@dataclass(frozen=True)
+class V6ModelData:
+    features: pd.DataFrame
+    target: pd.Series
+    identity: pd.DataFrame
+
+
 def load_feature_set(
     feature_set_name: str,
     dataset_version: str = DATASET_VERSION,
@@ -53,6 +62,63 @@ def load_feature_set(
         raise ValueError(f"Unknown feature set: {feature_set_name}")
 
     return feature_sets[feature_set_name]
+
+
+def resolve_v6_numeric_feature_set(
+    feature_set_name: str,
+    data_dir: Path | None = None,
+) -> list[str]:
+    config = get_research_config("v6.0")
+    data_dir = data_dir or resolve_data_dir(config.dataset_version)
+    official_features = load_feature_set(
+        feature_set_name,
+        dataset_version=config.dataset_version,
+    )
+    if feature_set_name == "medium" and len(official_features) != 351:
+        raise ValueError(
+            "Unexpected v6 medium feature count: "
+            f"{len(official_features)}; expected 351."
+        )
+
+    parquet = pq.ParquetFile(data_dir / "train.parquet")
+    schema = parquet.schema_arrow
+    missing = [name for name in official_features if name not in schema.names]
+    if missing:
+        raise ValueError(
+            f"v6 {feature_set_name} features missing from Train schema: {missing}"
+        )
+
+    numeric_features = []
+    for name in official_features:
+        if name == "feature_country":
+            continue
+        column_type = schema.field(name).type
+        if pa.types.is_integer(column_type) or pa.types.is_floating(column_type):
+            numeric_features.append(name)
+
+    if feature_set_name == "medium" and len(numeric_features) != 350:
+        raise ValueError(
+            "Unexpected numeric v6 medium feature count: "
+            f"{len(numeric_features)}; expected 350."
+        )
+    return numeric_features
+
+
+def prepare_v6_model_data(
+    data: pd.DataFrame,
+    features: list[str],
+) -> V6ModelData:
+    config = get_research_config("v6.0")
+    required = {*V6_IDENTITY_COLUMNS, config.target_column, *features}
+    _require_columns(data, required, "v6 model data")
+    if len(features) != len(set(features)):
+        raise ValueError("v6 model feature names must be unique.")
+    _require_mature_target(data, config, "v6 model data")
+    return V6ModelData(
+        features=data.loc[:, features].copy(),
+        target=data.loc[:, config.target_column].copy(),
+        identity=data.loc[:, V6_IDENTITY_COLUMNS].copy(),
+    )
 
 
 def _expected_weekly_dates(start: str, end: str) -> list[str]:

@@ -105,6 +105,98 @@ See the [`v5.3 Data Guide`](docs/data/DATA_GUIDE_v5.3.md) for detailed informati
 
 The current baseline model is **LightGBM**.
 
+The reusable v6 model interface now provides:
+
+- `resolve_v6_numeric_feature_set(...)` for schema-checked official feature sets
+- `prepare_v6_model_data(...)` to separate numeric features, the explicit Jupiter-60 target, and identity columns
+- `train_validated_lightgbm(...)` for validated fitting with an explicit ordered feature list
+- `predict_validated_lightgbm(...)` for order-checked predictions returned with the input row index
+
+The initial v6 baseline policy resolves the official `medium` set, excludes the string-valued `feature_country`, and uses the remaining 350 numeric features in official metadata order. Numeric NaNs are left for LightGBM to handle natively; no global imputation, normalization, target-based selection, or early stopping is applied.
+
+Run the model-interface tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_models -v
+```
+
+Only tiny synthetic models are trained by these tests. Full v6 walk-forward training has not been performed; the evaluation and artifact contracts described below are implemented but contain no real v6 results yet.
+
+### v6 OOF Evaluation and Artifacts
+
+The reusable evaluation layer validates research-only OOF rows with this contract:
+
+```text
+date, numerai_ticker, composite_figi, fold_id,
+prediction, target_jupiter_60
+```
+
+It rejects duplicate identities, missing or nonfinite predictions, null targets, incorrect fold assignments, incomplete research-date coverage, and any gap, holdout, or immature date. Overall summaries are computed over per-date scores, so the 18-date final fold is not given the same weight as a 78-date fold.
+
+Official Classic v6 NCORR (`neutral_corr` version 1) is implemented with `numerai-tools==0.7.2` and all 300 verified v6 neutralizer columns. It is calculated independently for each weekly date and remains distinct from `NUMERAI_CORR_JUPITER_60`, the preserved non-neutral Legacy CORR research diagnostic. The exact historical Meta Model required for NMMC and the exact shared benchmark series required for NBMC are not available through a verified public source, so neither contribution metric is implemented or approximated.
+
+Acquire and verify the official Validation neutralizer reproducibly with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.download_data --version v6.0 --file validation_neutralizer.parquet
+.\.venv\Scripts\python.exe -B -m src.audit_scoring_references --version v6.0
+```
+
+The audit reads only Parquet metadata and identity/date columns from Validation; it does not read targets. NCORR scoring loads only one requested date and its 300 neutralizer columns at a time, checks exact `date`/`numerai_ticker`/`composite_figi` row alignment, then calls the official scoring function directly.
+
+Install the pinned dependencies and run the official-scoring tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -B -m unittest tests.test_ncorr tests.test_evaluation -v
+```
+
+No real v6 OOF prediction or NCORR result exists yet; only synthetic numerical and artifact-contract verification has been run.
+
+### v6 Walk-Forward Pipeline
+
+The integrated v6 pipeline resolves the official 350-feature numeric Medium set, loads only those features plus protected identity and Jupiter-60 fields, generates the approved five folds, and fits a fresh baseline LightGBM model per fold. Validation labels are used only after prediction for scoring; they are not passed to model fitting or early stopping. Fold predictions retain their original identity and are validated before official NCORR and separately named Legacy CORR are calculated.
+
+Run the complete test suite:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
+```
+
+Run the bounded synthetic smoke pipeline:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --experiment-id v6_smoke_001 --smoke
+```
+
+Smoke mode constructs synthetic approved-date data and cannot invoke the real-data loader. Its artifacts are marked `run_kind: synthetic_smoke` and must not be interpreted as research performance.
+
+The future real baseline command is shown for reproducibility but has **not** been executed:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --experiment-id v6_medium_baseline_001 --run --confirm-full-run
+```
+
+Both `--run` and `--confirm-full-run` are required. Outputs are non-overwriting, and only directories containing `COMPLETED.json` can be loaded as completed experiments. No real v6 five-fold baseline or OOF performance result exists yet.
+
+Future completed experiments can be saved without overwriting under:
+
+```text
+outputs/v6.0/experiments/<experiment_id>/
+├── metadata.json
+├── metrics.json
+├── oof_predictions.parquet
+└── per_date_metrics.parquet
+```
+
+Run the synthetic evaluation and artifact tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_evaluation -v
+```
+
+No real v6 OOF predictions or experiment directory has been created yet.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

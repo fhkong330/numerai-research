@@ -204,7 +204,26 @@ Run the synthetic evaluation and artifact tests with:
 .\.venv\Scripts\python.exe -B -m unittest tests.test_evaluation -v
 ```
 
-The real baseline above is the only completed v6 research experiment. No feature selection, tuning, model comparison, or holdout evaluation has been performed.
+The Medium run above established the first real v6 benchmark. No feature selection, tuning, or holdout evaluation has been performed.
+
+### Small vs Medium controlled comparison
+
+Experiment `v6_small_baseline_002` changed only the official feature set, using 100 numeric Small features that are an ordered subset of Medium's 350. Model parameters, folds, target, purge, OOF dates, neutralizer, and scoring were unchanged.
+
+| Feature set | Mean NCORR | NCORR Sharpe-like | Positive dates | Mean Legacy CORR |
+|---|---:|---:|---:|---:|
+| Medium | 0.026121 | 1.4527 | 93.33% | 0.022410 |
+| Small | 0.015617 | 0.9768 | 80.91% | 0.012855 |
+
+Small minus Medium mean paired NCORR was `-0.010504` with paired-date standard deviation `0.017189`; Small won 24.24% of dates. Small underperformed overall and in Folds 1–4, but exceeded Medium in 2024, partial 2025, and the short fifth fold. This is a temporal comparison, not a feature-importance conclusion or a dependence-aware significance test.
+
+Reproduce the saved-artifact comparison without retraining:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.compare_experiments --version v6.0 --baseline v6_medium_baseline_001 --candidate v6_small_baseline_002
+```
+
+Both experiment directories remain local and Git-ignored. No holdout evaluation has been performed.
 
 The modeling pipeline separates reusable functionality into dedicated modules:
 

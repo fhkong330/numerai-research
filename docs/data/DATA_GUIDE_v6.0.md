@@ -335,8 +335,8 @@ Known limitations:
 - The approved boundaries are snapshot-specific and intentionally fail verification when the file date coverage changes.
 - The 16-date purge is configured for Jupiter-60 and must be reconsidered for another target horizon.
 - The short final fold contributes only 18 dates and should not receive equal fold weight in aggregate evaluation.
-- One real v6 Medium LightGBM baseline has run; no feature selection, model comparison, tuning, or holdout evaluation has been performed.
-- The reusable interfaces have synthetic coverage and one completed real walk-forward baseline; broader model and feature comparisons remain future work.
+- Two controlled real v6 LightGBM runs now compare official Medium and Small feature sets; no feature selection, engineering, tuning, or holdout evaluation has been performed.
+- The reusable interfaces have synthetic coverage and two completed real walk-forward experiments; broader model comparisons remain future work.
 
 ## Integrated Research Data Flow
 
@@ -379,6 +379,22 @@ Headline research results:
 | Legacy CORR | 0.022410 | 0.016756 | 1.3374 | 91.21% |
 
 These are Research Validation results, not sealed-holdout results. They must not be interpreted as evidence from the final holdout.
+
+## Small Feature-Set Experiment
+
+Experiment `v6_small_baseline_002` verified the official `small` metadata set against the v6 Train schema:
+
+- Numeric Small features: 100
+- Numeric Medium features: 350
+- Relationship: every Small feature is contained in Medium and appears in the same relative official order
+- Excluded categorical feature: `feature_country` is not part of the numeric model matrix
+- OOF rows and dates: identical to Medium, 2,180,295 rows across 330 dates
+
+Only the feature list changed. Dataset version, `target_jupiter_60`, baseline LightGBM parameters, random seed, expanding folds, purge, neutralizer checksum, and NCORR implementation were identical. Artifact validation found no duplicate identities or gap/holdout/immature rows.
+
+Small completed in approximately nine minutes versus approximately eighteen minutes for Medium. Exact peak memory and component timings were not instrumented; the reduced feature matrix and LightGBM bin count were observed, but no unsupported memory estimate is made.
+
+Small's overall NCORR was 0.015617 with Sharpe-like ratio 0.9768, versus Medium's 0.026121 and 1.4527. Small's NCORR standard deviation was lower (0.015988 versus 0.017981), but the reduction in mean was substantially larger. Small performed better in 2024 and partial 2025 while underperforming in the five earlier calendar periods. These observations describe temporal outcomes only and do not identify causal feature importance.
 
 ## Remaining Validation-Design Questions
 

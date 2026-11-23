@@ -495,3 +495,56 @@ NCORR exceeded Legacy CORR overall and in every fold. Performance was strongest 
 Limitations: this is repeated Research Validation rather than sealed-holdout evidence; no hyperparameter or feature comparison has yet been performed; the final fold is short; runtime components and peak memory were not instrumented; NMMC and NBMC remain unavailable.
 
 Next research questions should be reviewed before action: model-independent feature quality and stability, alternative baseline model families under the same folds, and whether carefully predeclared ensembling improves later-period robustness. No tuning or follow-on experiment was started in this task.
+
+---
+
+## 2026-11-21 — Task 18A: v6 Small vs Medium Feature Set
+
+### Hypothesis and controls
+
+Hypothesis: the smaller official v6 feature set might improve generalization or temporal stability relative to Medium.
+
+This was a controlled comparison between `v6_medium_baseline_001` and `v6_small_baseline_002`. Only the feature set changed. Small resolved to 100 numeric features, all an ordered subset of Medium's 350. Both experiments used `v6.0`, `target_jupiter_60`, the unchanged baseline LightGBM parameters and seed, identical five expanding folds, a 16-date purge, the same 330 Research Validation dates, the official neutralizer, and NCORR version 1. OOF row identities matched exactly.
+
+### Aggregate results
+
+| Metric | Medium | Small | Small − Medium |
+|---|---:|---:|---:|
+| Mean NCORR | 0.026121 | 0.015617 | -0.010504 |
+| NCORR std. dev. | 0.017981 | 0.015988 | -0.001993 |
+| NCORR Sharpe-like | 1.4527 | 0.9768 | -0.4759 |
+| NCORR positive dates | 93.33% | 80.91% | -12.42 pp |
+| Mean Legacy CORR | 0.022410 | 0.012855 | -0.009555 |
+| Legacy CORR Sharpe-like | 1.3374 | 0.8972 | -0.4402 |
+
+Across the 330 paired dates, the NCORR difference had mean `-0.010504`, standard deviation `0.017189`, and Small outperformed Medium on 24.24% of dates. No statistical-significance claim is made because weekly score dependence was not modeled.
+
+### Fold comparison
+
+| Fold | Medium NCORR | Small NCORR | Difference |
+|---:|---:|---:|---:|
+| 1 | 0.025914 | 0.011938 | -0.013976 |
+| 2 | 0.030107 | 0.008531 | -0.021576 |
+| 3 | 0.027457 | 0.018721 | -0.008735 |
+| 4 | 0.022474 | 0.021814 | -0.000659 |
+| 5 | 0.019773 | 0.021968 | +0.002196 |
+
+### Annual NCORR comparison
+
+| Year | Medium | Small | Difference |
+|---:|---:|---:|---:|
+| 2019 | 0.029578 | 0.015110 | -0.014467 |
+| 2020 | 0.015034 | 0.000775 | -0.014259 |
+| 2021 | 0.039307 | 0.015223 | -0.024084 |
+| 2022 | 0.026913 | 0.016910 | -0.010004 |
+| 2023 | 0.034795 | 0.025253 | -0.009542 |
+| 2024 | 0.013239 | 0.018378 | +0.005139 |
+| 2025 partial | 0.018805 | 0.021926 | +0.003121 |
+
+### Interpretation and limitations
+
+Small did not improve generalization overall. Its disadvantage was broad across 2019–2023 and Folds 1–4, while its advantage was concentrated in 2024, partial 2025, and the short fifth fold. Small also had lower score dispersion, but not enough to offset its much lower mean. This comparison alone does not identify useful or harmful individual features, and no causal explanation is assigned to the recent reversal.
+
+The Small run completed in approximately nine minutes without errors. Exact per-fold timing and peak memory were not instrumented. Artifacts contain 2,180,295 OOF rows, 330 dates, five models, the completion marker, and the same verified NCORR reference checksum as Medium. No holdout target was accessed.
+
+The next research question should focus on model-independent feature quality and temporal stability—especially whether Medium-only features add broad historical signal at the cost of recent robustness—before any feature subset is selected. No additional experiment was started.

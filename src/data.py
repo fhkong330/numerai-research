@@ -44,6 +44,12 @@ class V6ModelData:
     identity: pd.DataFrame
 
 
+@dataclass(frozen=True)
+class V6TrainingData:
+    features: pd.DataFrame
+    target: pd.Series
+
+
 def load_feature_set(
     feature_set_name: str,
     dataset_version: str = DATASET_VERSION,
@@ -70,10 +76,11 @@ def resolve_v6_numeric_feature_set(
 ) -> list[str]:
     config = get_research_config("v6.0")
     data_dir = data_dir or resolve_data_dir(config.dataset_version)
-    official_features = load_feature_set(
-        feature_set_name,
-        dataset_version=config.dataset_version,
-    )
+    with (data_dir / "features.json").open("r", encoding="utf-8") as file:
+        feature_sets = json.load(file)["feature_sets"]
+    if feature_set_name not in feature_sets:
+        raise ValueError(f"Unknown feature set: {feature_set_name}")
+    official_features = feature_sets[feature_set_name]
     if feature_set_name == "medium" and len(official_features) != 351:
         raise ValueError(
             "Unexpected v6 medium feature count: "
@@ -82,6 +89,7 @@ def resolve_v6_numeric_feature_set(
 
     parquet = pq.ParquetFile(data_dir / "train.parquet")
     schema = parquet.schema_arrow
+    parquet.close()
     missing = [name for name in official_features if name not in schema.names]
     if missing:
         raise ValueError(
@@ -118,6 +126,107 @@ def prepare_v6_model_data(
         features=data.loc[:, features].copy(),
         target=data.loc[:, config.target_column].copy(),
         identity=data.loc[:, V6_IDENTITY_COLUMNS].copy(),
+    )
+
+
+def prepare_v6_training_data(
+    data: pd.DataFrame,
+    features: list[str],
+) -> V6TrainingData:
+    """Select the LightGBM inputs without copying unused identity columns."""
+    config = get_research_config("v6.0")
+    required = {config.target_column, *features}
+    _require_columns(data, required, "v6 training data")
+    if len(features) != len(set(features)):
+        raise ValueError("v6 model feature names must be unique.")
+    _require_mature_target(data, config, "v6 training data")
+    return V6TrainingData(
+        features=data.loc[:, features],
+        target=data.loc[:, config.target_column],
+    )
+
+
+def _ordered_v6_indices(data: pd.DataFrame, dates: tuple[str, ...]) -> pd.Index:
+    config = get_research_config("v6.0")
+    selected = data.loc[
+        data[config.time_column].isin(dates),
+        [config.time_column, "numerai_ticker"],
+    ]
+    return selected.sort_values(
+        [config.time_column, "numerai_ticker"], kind="stable"
+    ).index
+
+
+def prepare_v6_fold_model_data(
+    historical_training: pd.DataFrame,
+    research_validation: pd.DataFrame,
+    features: list[str],
+    fold,
+) -> tuple[V6TrainingData, V6ModelData]:
+    """Build one fold without a full-history or whole-fold DataFrame copy."""
+    config = get_research_config("v6.0")
+    required = {*V6_IDENTITY_COLUMNS, config.target_column, *features}
+    _require_columns(historical_training, required, "v6 historical training")
+    _require_columns(research_validation, required, "v6 research validation")
+    if len(features) != len(set(features)):
+        raise ValueError("v6 model feature names must be unique.")
+
+    historical_index = _ordered_v6_indices(historical_training, fold.train_dates)
+    research_train_index = _ordered_v6_indices(
+        research_validation, fold.train_dates
+    )
+    validation_index = _ordered_v6_indices(
+        research_validation, fold.validation_dates
+    )
+    if len(historical_index) + len(research_train_index) == 0:
+        raise ValueError("Fold preparation produced empty training data.")
+    if len(validation_index) == 0:
+        raise ValueError("Fold preparation produced empty validation data.")
+
+    train_feature_parts = []
+    train_target_parts = []
+    for frame, index in (
+        (historical_training, historical_index),
+        (research_validation, research_train_index),
+    ):
+        if len(index):
+            train_feature_parts.append(frame.loc[index, features])
+            train_target_parts.append(frame.loc[index, config.target_column])
+    train_features = (
+        train_feature_parts[0]
+        if len(train_feature_parts) == 1
+        else pd.concat(train_feature_parts, axis=0)
+    )
+    train_target = (
+        train_target_parts[0]
+        if len(train_target_parts) == 1
+        else pd.concat(train_target_parts, axis=0)
+    )
+    validation_features = research_validation.loc[validation_index, features]
+    validation_target = research_validation.loc[
+        validation_index, config.target_column
+    ]
+    validation_identity = research_validation.loc[
+        validation_index, V6_IDENTITY_COLUMNS
+    ]
+
+    _require_mature_target(
+        pd.DataFrame({config.target_column: train_target}),
+        config,
+        "v6 fold training data",
+    )
+    _require_mature_target(
+        pd.DataFrame({config.target_column: validation_target}),
+        config,
+        "v6 fold validation data",
+    )
+    return (
+        V6TrainingData(features=train_features, target=train_target),
+        V6ModelData(
+            features=validation_features,
+            target=validation_target,
+            identity=validation_identity,
+        ),
     )
 
 

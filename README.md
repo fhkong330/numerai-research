@@ -225,6 +225,28 @@ Reproduce the saved-artifact comparison without retraining:
 
 Both experiment directories remain local and Git-ignored. No holdout evaluation has been performed.
 
+### All-feature memory preflight
+
+The official `all` set resolves to 1,039 numeric features after excluding `feature_country`: 1,017 `int8` and 22 `float32` columns. Run the bounded Train-only engineering profile with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.profile_feature_memory --version v6.0 --feature-set all --max-sample-rows 100000 --fit-lightgbm --output outputs/v6.0/profiling/all_100000_rows_baseline.json
+```
+
+The 100,000-row feature matrix used 110.5 MB (decimal) with no dtype conversion. A single Fold 5 feature matrix extrapolates to 6.94 GB before research-history copies, fold/model copies, validation data, LightGBM native structures, temporary arrays, and OS overhead. The bounded baseline fit took 15.35 seconds and peaked at 3.08 GB process RSS. Runtime must not be extrapolated linearly from this sample.
+
+Classification: **High risk / not recommended** for the current unoptimized five-fold pipeline on a 32 GB Windows machine. The full All-feature experiment has not been run; loading and copy behavior should be optimized and re-profiled first. This profile does not calculate predictive-performance metrics or access Validation/holdout targets.
+
+The Task 18B.1 pipeline now constructs fold model inputs directly from the historical and Research Validation source frames. It no longer creates a complete concatenated research-history frame, complete copied fold frames, and a second feature copy. Fold models are still persisted one at a time and released before the next fold; OOF accumulation retains only identity, prediction, target, and fold columns. NCORR neutralizers remain loaded one date at a time.
+
+Reproduce the post-optimization bounded profile with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.profile_feature_memory --version v6.0 --feature-set all --max-sample-rows 100000 --fit-lightgbm --output outputs/v6.0/profiling/all_100000_rows_baseline_optimized.json
+```
+
+The optimized profile preserved the 110.5 MB feature matrix and compact dtypes. RSS after model-input extraction fell from 1,354,715,136 to 1,246,912,512 bytes; sampled LightGBM peak RSS fell from 3,079,294,976 to 2,986,553,344 bytes; runtime changed from 15.35 to 15.02 seconds. The bounded copy model removes one 110,500,132-byte feature copy per 100,000 rows. These measurements do not establish full-fold peak memory. Classification remains **High risk / not recommended** until a larger staged profile demonstrates sufficient 32 GB headroom; targeted feature research is safer than launching the full All-feature run now.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

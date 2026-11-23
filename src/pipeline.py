@@ -9,14 +9,13 @@ import pandas as pd
 
 from src.data import (
     V6_IDENTITY_COLUMNS,
-    build_v6_research_history,
     load_feature_set,
     load_training_data,
     load_validation_data,
     load_v6_historical_training_data,
     load_v6_research_validation_data,
     prepare_datasets,
-    prepare_v6_model_data,
+    prepare_v6_fold_model_data,
     resolve_v6_numeric_feature_set,
     build_research_history,
 )
@@ -45,7 +44,6 @@ from src.validation import (
     generate_folds_from_data,
     load_v6_fold_dates,
     prepare_walk_forward_fold,
-    prepare_v6_walk_forward_fold,
 )
 
 from src.config import (
@@ -353,17 +351,17 @@ def execute_v6_walk_forward(
     params = DEFAULT_LIGHTGBM_PARAMS.copy()
     if model_params:
         params.update(model_params)
-    history = build_v6_research_history(historical_training, research_validation)
-    del historical_training, research_validation
-    gc.collect()
     oof_parts = []
 
     with tempfile.TemporaryDirectory(prefix="numerai-v6-models-") as temp_dir:
         model_files = {}
         for fold in folds:
-            fold_train, fold_valid = prepare_v6_walk_forward_fold(history, fold)
-            train_data = prepare_v6_model_data(fold_train, features)
-            valid_data = prepare_v6_model_data(fold_valid, features)
+            train_data, valid_data = prepare_v6_fold_model_data(
+                historical_training,
+                research_validation,
+                features,
+                fold,
+            )
             model = create_lightgbm_model(params)
             model = train_validated_lightgbm(
                 model, train_data.features, train_data.target, features
@@ -386,7 +384,7 @@ def execute_v6_walk_forward(
             model_path = Path(temp_dir) / f"fold_{fold.fold}.txt"
             model.booster_.save_model(str(model_path))
             model_files[fold.fold] = model_path
-            del fold_train, fold_valid, train_data, valid_data, model, predictions
+            del train_data, valid_data, model, predictions, fold_ids
             gc.collect()
 
         oof = pd.concat(oof_parts).sort_values(

@@ -548,3 +548,62 @@ Small did not improve generalization overall. Its disadvantage was broad across 
 The Small run completed in approximately nine minutes without errors. Exact per-fold timing and peak memory were not instrumented. Artifacts contain 2,180,295 OOF rows, 330 dates, five models, the completion marker, and the same verified NCORR reference checksum as Medium. No holdout target was accessed.
 
 The next research question should focus on model-independent feature quality and temporal stability—especially whether Medium-only features add broad historical signal at the cost of recent robustness—before any feature subset is selected. No additional experiment was started.
+
+---
+
+## 2026-11-23 — Task 18B: All-Feature Memory and Runtime Preflight
+
+### Configuration and scope
+
+Profiled the official v6 `all` set using a bounded 100,000-row Train sample. After excluding `feature_country`, the model matrix contained 1,039 numeric features: 1,017 `int8` and 22 `float32`. The profiling fit used the unchanged baseline LightGBM parameters (`n_estimators=300`, `learning_rate=0.05`, `num_leaves=31`, `random_state=42`, `n_jobs=-1`). This was an engineering feasibility fit only; it did not use Validation, run folds, or calculate NCORR, Legacy CORR, NMMC, or NBMC.
+
+### Measurements
+
+- Sample-frame deep memory: 116,252,335 bytes
+- Feature columns: 110,500,000 bytes, or 1,105 bytes per row
+- Extracted model-feature copy: 110,500,132 bytes
+- Dtype conversions: none
+- Process RSS before/after sample load: 166,322,176 / 1,243,070,464 bytes
+- Process RSS before/after model-data extraction: 1,243,553,792 / 1,354,715,136 bytes
+- LightGBM runtime: 15.35 seconds
+- Fit RSS before / sampled peak / after: 1,354,743,808 / 3,079,294,976 / 1,368,403,968 bytes
+
+LightGBM selected col-wise processing, built 8,685 bins, and reported 787 used features for this bounded early-Train sample. This is not a feature-quality result; the sample may not expose variation available elsewhere.
+
+### Extrapolation and pipeline assessment
+
+At 1,105 observed feature bytes per row, one 6,284,208-row Fold 5 pandas feature matrix extrapolates to 6,944,049,840 bytes (about 6.47 GiB). This excludes research-history storage, `.copy()` fold slices, the second model-feature copy, validation matrices, LightGBM native datasets/histograms, temporary arrays, and Windows/application headroom.
+
+The current pipeline can temporarily retain full historical and research frames while concatenating research history, then retain history alongside copied fold and model matrices. The bounded LightGBM peak also cannot be scaled linearly with confidence because fixed overhead, bin construction, feature filtering, threading, and dataset size interact nonlinearly. Training runtime likewise is not extrapolated linearly.
+
+### Decision
+
+Classification: **High risk / not recommended** on the current 32 GB Windows machine. Do not start the full All-feature five-fold experiment with the current copy behavior. First reduce full-frame duplication and fold/model copies, then repeat a bounded and preferably larger staged memory profile. No All-feature research experiment or model-performance result was produced.
+
+---
+
+## 2026-11-23 — Task 18B.1: v6 Pipeline Memory Optimization
+
+### Duplication and implementation
+
+The real pipeline retained caller-owned historical and Research Validation frames while also building a complete concatenated research history. For every fold it then made complete training and validation DataFrame copies before `prepare_v6_model_data` copied feature matrices again. The optimized implementation selects approved dates directly from the two protected source frames into final LightGBM feature/target inputs. It does not build the concatenated history or whole-fold frames. Models continue to be saved and released one fold at a time, OOF parts contain only required output columns, and official neutralizers remain date-bounded.
+
+No feature value/order, target, identity order, fold boundary, purge, model parameter, seed, scoring code, or holdout protection changed. Synthetic comparisons across all five folds matched legacy inputs exactly, including dtypes. A deterministic bounded LightGBM comparison matched predictions at absolute tolerance `1e-12`.
+
+### Before/after bounded profile
+
+Both profiles used the same first 100,000 Train rows, 1,039 numeric All features, and unchanged baseline parameters.
+
+| Measurement | Task 18B | Task 18B.1 |
+|---|---:|---:|
+| Feature bytes | 110,500,000 | 110,500,000 |
+| RSS after input extraction | 1,354,715,136 | 1,246,912,512 |
+| RSS before fit | 1,354,743,808 | 1,246,953,472 |
+| Sampled peak RSS | 3,079,294,976 | 2,986,553,344 |
+| Fit runtime | 15.35 s | 15.02 s |
+
+The optimized bounded copy model estimates 221,000,132 concurrent feature bytes instead of 331,500,264, removing one 110,500,132-byte sample-scale copy. Measured peak RSS fell by 92,741,632 bytes (3.0%). The 6,509,738-row full history feature payload and one Fold 5 feature matrix project to roughly 7.19 GB and 6.94 GB respectively; their removal is a structural projection, not a full-fold measurement, and the benefits cannot safely be added because of pandas and LightGBM allocation behavior.
+
+### Decision
+
+Classification remains **High risk / not recommended** for a complete All-feature five-fold run on 32 GB. The change removes the largest avoidable pandas duplicates, but the bounded profile cannot guarantee sufficient headroom for multi-million-row LightGBM native datasets and temporary structures. Do not launch the All-feature experiment without a larger staged profile; targeted feature research is the preferred next direction if risk reduction is the priority. This engineering task produced no predictive-performance result and accessed no Validation or holdout target.

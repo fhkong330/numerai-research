@@ -396,6 +396,47 @@ Small completed in approximately nine minutes versus approximately eighteen minu
 
 Small's overall NCORR was 0.015617 with Sharpe-like ratio 0.9768, versus Medium's 0.026121 and 1.4527. Small's NCORR standard deviation was lower (0.015988 versus 0.017981), but the reduction in mean was substantially larger. Small performed better in 2024 and partial 2025 while underperforming in the five earlier calendar periods. These observations describe temporal outcomes only and do not identify causal feature importance.
 
+## All-Feature Memory Profile
+
+The official `all` metadata set contains 1,040 entries. Excluding string-valued `feature_country` leaves 1,039 numeric model features. A bounded 100,000-row Train sample verified:
+
+| Observation | Result |
+|---|---:|
+| Integer features | 1,017 × `int8` |
+| Floating features | 22 × `float32` |
+| Full sample-frame deep memory | 116,252,335 bytes |
+| Feature-column memory | 110,500,000 bytes |
+| Extracted model-feature copy | 110,500,132 bytes |
+| Feature bytes per row | 1,105 |
+| Observed dtype conversions | None |
+
+Selected-column Parquet reads preserve the compact dtypes. However, the current real pipeline loads full historical and Research Validation frames, concatenates them into research history, makes `.copy()` fold slices, and `prepare_v6_model_data` copies model features again. These objects can overlap in memory. LightGBM receives the compact pandas dtypes but constructs additional native bins, datasets, histograms, and temporary arrays.
+
+Multiplying the observed 1,105 feature bytes per row by the actual 6,284,208-row Fold 5 training set gives 6,944,049,840 bytes (about 6.47 GiB) for one pandas feature matrix. This is an extrapolation only and excludes index/representation changes, research-history and fold copies, validation matrices, LightGBM internal memory, and the operating system.
+
+The bounded baseline-parameter LightGBM fit took 15.35 seconds. Process RSS was 1,354,743,808 bytes before fitting, peaked at 3,079,294,976 bytes under 20 ms `psutil` sampling, and was 1,368,403,968 bytes afterward. LightGBM reported 787 used features in this early bounded sample; no predictive interpretation is assigned. Small-sample runtime and peak memory are not assumed to scale linearly.
+
+Feasibility classification: **High risk / not recommended** for the current unoptimized All-feature walk-forward on a 32 GB Windows machine. The full experiment should not proceed until full-frame duplication is reduced and the optimized path is re-profiled. The profile read Train only and performed no OOF, NCORR, Legacy CORR, or holdout operation.
+
+### Task 18B.1 memory optimization
+
+The former real fold path retained the original historical and Research Validation frames while constructing a second full concatenated research-history frame. Each fold then copied all selected columns into training and validation frames, and `prepare_v6_model_data` copied the feature matrices again. The optimized path keeps the two protected source frames, selects approved train and validation dates directly into the final model matrices, and never constructs the full research-history or complete fold frames. Feature order, compact dtypes, targets, identities, folds, purge, LightGBM parameters, and scoring are unchanged.
+
+The complete research history has 6,509,738 rows. At the sampled 1,105 feature bytes per row, its feature payload alone projects to about 7.19 GB (6.70 GiB); removing it is a projected full-run benefit, not a measured full-fold peak. Similarly, avoiding the second Fold 5 feature matrix projects to another 6.94 GB reduction. Pandas representation, copy-on-write behavior, LightGBM native allocation, and temporary objects make these projections non-additive.
+
+| Bounded 100,000-row measurement | Before | After |
+|---|---:|---:|
+| Feature-column memory | 110,500,000 | 110,500,000 |
+| Estimated concurrent feature bytes in profiled extraction path | 331,500,264 | 221,000,132 |
+| RSS after model-input extraction | 1,354,715,136 | 1,246,912,512 |
+| RSS immediately before LightGBM fit | 1,354,743,808 | 1,246,953,472 |
+| Sampled peak RSS | 3,079,294,976 | 2,986,553,344 |
+| Fit runtime | 15.35 s | 15.02 s |
+
+The measured peak reduction was about 92.7 MB (3.0%); extraction RSS fell by about 107.8 MB (8.0%). Runtime was essentially unchanged and is not treated as a predictive-performance result. Deterministic synthetic regression tests verified identical feature values/dtypes, target values, identities/order, fold assignments, and LightGBM predictions within absolute tolerance `1e-12`.
+
+Feasibility remains **High risk / not recommended** on 32 GB. The bounded result verifies removal of one sample-scale copy but cannot guarantee that multi-million-row LightGBM native allocations fit. A larger staged profile would be required before a full All-feature run; otherwise research should proceed with targeted feature analysis. Neither profile used Validation targets, OOF scoring, or holdout data.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

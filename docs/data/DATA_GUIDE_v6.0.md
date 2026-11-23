@@ -437,6 +437,126 @@ The measured peak reduction was about 92.7 MB (3.0%); extraction RSS fell by abo
 
 Feasibility remains **High risk / not recommended** on 32 GB. The bounded result verifies removal of one sample-scale copy but cannot guarantee that multi-million-row LightGBM native allocations fit. A larger staged profile would be required before a full All-feature run; otherwise research should proceed with targeted feature analysis. Neither profile used Validation targets, OOF scoring, or holdout data.
 
+## Feature Quality IC Contract
+
+The initial model-independent feature-quality scope is the official Medium set after excluding `feature_country`: 350 numeric features against explicit `target_jupiter_60`, grouped by observed weekly `date`. No NCORR neutralization, Gaussianization, feature interpretation, model fitting, redundancy clustering, or selection formula is part of this diagnostic.
+
+For one date and feature, the implementation:
+
+1. Drops rows where either the feature or target is missing.
+2. Requires at least three valid pairs by default.
+3. Rejects constant feature or target values as undefined.
+4. Assigns average ranks to tied feature and target values.
+5. Calculates Pearson correlation between those two rank vectors.
+
+The resulting Spearman IC retains its sign. Every row records the date, feature, IC, valid-pair count, total row count, coverage, and status. A valid numerical zero remains `0.0`; insufficient, constant, or otherwise undefined IC remains missing and carries a non-valid status.
+
+### Fold-specific as-of restrictions
+
+Feature summaries are constructed separately for every approved fold. The strict aggregation interface requires complete date/feature rows for exactly `fold.train_dates`. It rejects purge dates, same-fold Validation dates, observations that become eligible only in a later fold, the pre-holdout gap, sealed holdout, and immature dates. The real audit runner reads only the union of approved training dates; a Research Validation date can contribute only after it becomes part of a later fold's expanding training history. Approved training targets must be mature and non-null.
+
+Available summaries are mean and median IC, sample IC standard deviation, absolute mean IC, mean-to-standard-deviation ratio when defined, sign consistency relative to the mean sign, valid-date coverage, rolling 52-date mean IC, and annual mean/median IC with coverage. These are descriptive statistics; no final ranking or selection rule is implemented.
+
+### Memory and artifacts
+
+The runner reads one date at a time from Train or date-filtered Validation columns, calculates 350 feature rows, and releases the source frame before the next date. It never loads the full Medium history or constructs a dense feature-to-feature correlation matrix. Gap and holdout targets are never requested.
+
+A completed report uses:
+
+```text
+outputs/v6.0/feature_quality/<analysis_id>/
+├── COMPLETED.json
+├── metadata.json
+├── per_date_ic.parquet
+├── fold_summaries.parquet
+├── rolling_ic.parquet
+└── annual_ic.parquet
+```
+
+Metadata records the ordered feature list, dataset and target, exact IC and missingness policies, minimum pair count, rolling window, exact fold training cutoffs, configuration, and Git state. Writers refuse to overwrite an existing analysis. Task 19B created and tested this contract.
+
+### Task 19C Medium audit
+
+The single real audit `v6_medium_ic_001` completed in approximately 14 minutes 18 seconds. It covers the union of approved fold training dates, which equals the widest Fold 5 training history: 1,131 weekly dates from 2003-01-03 through 2024-08-30. It contains 395,850 unique feature-date rows for the 350 ordered Medium numeric features. Exactly 378,585 rows (95.6385%) have valid IC; 17,265 rows record `constant_feature`. There are no duplicate identities or unauthorized dates.
+
+For the latest Fold 5 as-of summaries:
+
+- Mean signed IC across features: `0.001129`; median: `0.001001`.
+- Mean absolute mean IC: `0.002674`; median: `0.002270`.
+- Median sign consistency: `0.565990`.
+- Median valid-date coverage: `1.0`; mean coverage: `0.956385`.
+- Positive-mean features: 218; negative-mean features: 132.
+- Fold 1-to-5 absolute-IC rank Spearman: `0.896282`; median absolute rank change: 24.
+
+The five strongest standalone features by latest-as-of absolute mean IC are `feature_constitution_30` (`0.009874`), `feature_strength_32` (`0.009855`), `feature_charisma_152` (`0.009369`), `feature_constitution_29` (`0.008719`), and `feature_constitution_36` (`0.008582`). These anonymous names are identifiers only and carry no inferred financial interpretation.
+
+Small-versus-Medium-only descriptive results are:
+
+| Latest Fold 5 training-history statistic | Small (100) | Medium-only (250) |
+|---|---:|---:|
+| Mean absolute mean IC | 0.002426 | 0.002773 |
+| Median absolute mean IC | 0.001865 | 0.002403 |
+| Median sign consistency | 0.550806 | 0.572060 |
+| Mean valid-date coverage | 0.940124 | 0.962889 |
+| Mean absolute recent 52-date IC | 0.004693 | 0.004795 |
+| Recent weakening percentage | 23.0% | 27.6% |
+| Recent sign-reversal percentage | 41.0% | 38.0% |
+| Median absolute Fold 1-to-5 rank change | 28 | 23 |
+
+The recent window is 2023-09-08 through 2024-08-30. Across all features, mean absolute recent 52-date IC is `0.004766` versus `0.002694` for the earlier-history mean; 92 features weaken and 136 reverse mean sign. Absolute estimates from a short window are more variable than long-history estimates, so their magnitudes are not directly equivalent evidence. Aggregate Medium-only standalone quality did not deteriorate relative to Small in a way that explains the known recent model-performance reversal. IC is descriptive and unconditional; interactions, redundancy, and LightGBM behavior remain untested.
+
+The sealed holdout, pre-holdout gap, immature dates, same-fold Validation dates, and every fold's purge dates remain excluded from its selection summaries. No feature subset, model result, NCORR, redundancy, importance, permutation, or ablation result was generated.
+
+## Saved Medium Model Importance Audit
+
+Task 19D loaded the five existing `v6_medium_baseline_001` fold boosters and joined them to `v6_medium_ic_001`; it did not fit or score a model. Every booster contains the same ordered 350-feature list as experiment metadata, official Medium metadata, and the IC audit. Gain and split values are normalized independently to sum to one within each fold. Average ranks preserve ties, including a shared bottom rank for zero-importance features.
+
+The completed non-overwriting artifact is:
+
+```text
+outputs/v6.0/model_importance/v6_medium_importance_001/
+├── COMPLETED.json
+├── metadata.json
+├── per_fold_importance.parquet
+├── cross_fold_summary.parquet
+├── group_summary.parquet
+├── ic_importance.parquet
+├── rank_correlations.parquet
+├── ic_relationships.parquet
+└── research_summary.json
+```
+
+It contains 1,750 unique fold-feature rows, 350 cross-fold feature summaries, ten Small/Medium-only fold summaries, and 1,750 exact fold-matched IC joins. Normalized gain and split shares sum to one in every fold. No feature is unused across all five models; one Medium-only feature has zero gain/split in Fold 3 and one in Fold 5. Using a predeclared top-35 threshold, 21 features rank in the top group in at least four folds and 20 rank there in exactly one fold.
+
+The highest mean normalized gain shares are:
+
+| Feature | Group | Mean gain share |
+|---|---|---:|
+| `feature_endurance_7` | Small | 0.014921 |
+| `feature_endurance_5` | Medium-only | 0.009863 |
+| `feature_endurance_11` | Medium-only | 0.008583 |
+| `feature_strength_32` | Medium-only | 0.007340 |
+| `feature_wisdom_60` | Medium-only | 0.006799 |
+| `feature_wisdom_76` | Medium-only | 0.006759 |
+| `feature_wisdom_71` | Medium-only | 0.006661 |
+| `feature_constitution_172` | Small | 0.006505 |
+| `feature_constitution_175` | Medium-only | 0.006065 |
+| `feature_intelligence_20` | Medium-only | 0.005711 |
+
+Mean pairwise fold gain-rank Spearman is `0.794849`, the minimum pair is `0.753403`, and Fold 1 versus Fold 5 is `0.769943`. Median absolute Fold 1-to-5 rank movement is 38. Importance is therefore persistent but less stable than standalone absolute-IC ranks.
+
+| Group statistic across folds | Small | Medium-only |
+|---|---:|---:|
+| Total gain-share range | 0.321091–0.341620 | 0.658380–0.678909 |
+| Mean gain share per feature | 0.003337 | 0.002665 |
+| Mean top-ten within-group concentration | 0.194901 | 0.107751 |
+
+The group totals reflect unequal group sizes: Small is 28.6% of Medium features but receives roughly one-third of gain, whereas Medium-only contains 71.4% of features and receives roughly two-thirds. Small has higher per-feature average gain and greater within-group concentration. These observations do not attribute the Small/Medium OOF difference to either group.
+
+Each fold's importance is joined only to IC calculated through that model's training cutoff. Absolute mean IC versus normalized gain Spearman ranges from `0.230970` to `0.270855`; sign consistency versus gain ranges from `0.241401` to `0.261147`. Examples repeatedly classified as high-IC/low-gain include `feature_charisma_110`, `feature_charisma_104`, and `feature_endurance_19`. Repeated low-IC/high-gain examples include `feature_intelligence_20`, `feature_constitution_337`, `feature_constitution_259`, and `feature_constitution_77`. This weak positive relationship is expected to differ because gain reflects conditional tree use, interactions, and substitute features, while IC measures standalone monotonic association.
+
+Gain and split importance are model-dependent usage diagnostics. They are biased by tree construction and correlated alternatives and do not establish causality, standalone alpha, or incremental contribution. No validation target, holdout target, NCORR, permutation, redundancy, ablation, or selection rule was used.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

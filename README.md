@@ -247,6 +247,44 @@ Reproduce the post-optimization bounded profile with:
 
 The optimized profile preserved the 110.5 MB feature matrix and compact dtypes. RSS after model-input extraction fell from 1,354,715,136 to 1,246,912,512 bytes; sampled LightGBM peak RSS fell from 3,079,294,976 to 2,986,553,344 bytes; runtime changed from 15.35 to 15.02 seconds. The bounded copy model removes one 110,500,132-byte feature copy per 100,000 rows. These measurements do not establish full-fold peak memory. Classification remains **High risk / not recommended** until a larger staged profile demonstrates sufficient 32 GB headroom; targeted feature research is safer than launching the full All-feature run now.
 
+### Feature Quality infrastructure
+
+`src.feature_quality` provides model-independent, per-date cross-sectional Spearman IC diagnostics for the official 350 numeric Medium features. It uses pairwise-complete average ranks, preserves signed IC, records valid-pair counts and coverage, and stores undefined IC as missing with an explicit status rather than zero. Fold summaries are rebuilt independently from each approved fold's exact training dates; purge, same-fold validation, later research, gap, holdout, and immature dates are rejected by the as-of interface.
+
+Run the permanent synthetic verification with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_feature_quality -v
+```
+
+The future real Medium audit command is:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.feature_quality --version v6.0 --feature-set medium --analysis-id v6_medium_ic_001 --run --confirm-feature-audit
+```
+
+The audit streams one approved training date at a time and writes a non-overwriting report beneath `outputs/v6.0/feature_quality/<analysis_id>/`. Task 19C executed the command once as `v6_medium_ic_001`: 1,131 approved Fold 5 training-history dates (2003-01-03–2024-08-30), 350 features, and 395,850 feature-date rows. Of those rows, 378,585 (95.64%) have valid IC and 17,265 explicitly record `constant_feature` with missing IC.
+
+Analyze the completed compact artifacts without recomputing IC:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.analyze_feature_quality --version v6.0 --analysis-id v6_medium_ic_001
+```
+
+The widest approved as-of summary has median absolute mean IC `0.002270`, median sign consistency `0.5660`, and 218 positive-mean versus 132 negative-mean features. Fold 1-to-5 absolute-IC ranks have Spearman correlation `0.8963`, although the median feature moved 24 rank positions. Medium-only features show higher latest-as-of median absolute mean IC (`0.002403`) than Small (`0.001865`); this standalone association does not establish why the Small model outperformed Medium in 2024 and partial 2025. No feature subset was selected and no predictive-performance result was produced. Redundancy, model importance, permutation importance, and ablation remain out of scope.
+
+### Saved-model feature importance
+
+Task 19D reads the five existing `v6_medium_baseline_001` LightGBM boosters without retraining and joins each fold's gain/split importance only to the matching as-of IC summary from `v6_medium_ic_001`:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.analyze_model_importance --version v6.0 --experiment-id v6_medium_baseline_001 --feature-quality-id v6_medium_ic_001 --analysis-id v6_medium_importance_001
+```
+
+All 350 features were used in at least one fold. The strongest mean normalized-gain features were `feature_endurance_7` (1.4921%), `feature_endurance_5` (0.9863%), `feature_endurance_11` (0.8583%), `feature_strength_32` (0.7340%), and `feature_wisdom_60` (0.6799%). Pairwise fold gain-rank Spearman averaged `0.7948`; Fold 1 versus Fold 5 was `0.7699`, with median absolute movement of 38 ranks.
+
+Small captured 32.11%–34.16% of total fold gain with 100 features, while the 250 Medium-only features captured 65.84%–67.89%. Average gain per feature was higher for Small (`0.003337`) than Medium-only (`0.002665`), and Small importance was more concentrated in its top ten features. Fold-specific absolute IC versus gain correlations were positive but weak (`0.2310`–`0.2709`), confirming that standalone association and conditional model usage are distinct diagnostics. These results are not causal, do not measure incremental value, and define no selection policy.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

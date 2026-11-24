@@ -410,7 +410,15 @@ Preparation and scoring use separate directories and states beneath `outputs/v6.
 .\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
 ```
 
-Task 22A deliberately leaves real execution disabled until a separately reviewed Task 22B runner wires these validated primitives. No real data was prepared, predicted, targeted, or scored. Software checks provide auditable guardrails but cannot stop a person with direct filesystem access from bypassing them. The final holdout remains sealed.
+Task 22B enables only the preparation command; the scoring command remains deliberately disabled. Software checks provide auditable guardrails but cannot stop a person with direct filesystem access from bypassing them.
+
+The preparation command was executed exactly once as `v6_v1_final_001`. It reused the completed `v6_medium_ic_001` observations through 2024-08-30 and calculated the 34 missing eligible weekly dates through 2025-04-25, producing 1,165 dates and 407,750 date-feature IC rows. The final Top-250 list overlaps Fold 5 on 240 features (Jaccard `0.9231`) and differs by 10 additions and 10 removals; this is descriptive and did not alter the frozen selection rule.
+
+Both fixed LightGBMs trained on the same 6,509,738 rows over 1,165 dates from 2003-01-03 through 2025-04-25. Medium-350 trained in 180.70 seconds and Top-250 in 131.06 seconds; both contain 300 trees and reload with zero prediction difference. Runtime before artifact persistence was 362.38 seconds; peak process memory was not measured reliably.
+
+The target-free output contains 365,363 aligned, unique, finite predictions over the 52 dates from 2025-08-22 through 2026-08-14 for each component and the fixed 50/50 rank ensemble. It records `target_columns_accessed: []`, retains policy SHA-256 `4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e`, and passes full hash verification. There is no scoring directory, NCORR, Legacy CORR, target summary, or final performance result. The holdout targets remain sealed.
+
+The version-controlled integrity record is `docs/manifests/v6.0_v1_final_001_preparation_seal.json`, SHA-256 `dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297`. It records the 11 immutable preparation hashes and prepared/unscored/sealed state; it is not a claim that deliberate filesystem bypass is impossible.
 
 The modeling pipeline separates reusable functionality into dedicated modules:
 

@@ -700,7 +700,35 @@ The dedicated holdout neutralizer function accepts only the frozen 52 dates and 
 .\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
 ```
 
-Real execution remains deliberately disabled pending Task 22B review and wiring. This preserves the independent-validation boundary after infrastructure tests. Local safeguards are auditable accident-prevention controls, not a security boundary against deliberate direct filesystem modification. No real training, IC, prediction, target access, or score occurred; the holdout remains sealed.
+Task 22B enables the preparation command only. Real scoring remains deliberately disabled. Local safeguards are auditable accident-prevention controls, not a security boundary against deliberate direct filesystem modification.
+
+## Frozen V1 Final Preparation
+
+Task 22B executed the preparation command exactly once with evaluation ID `v6_v1_final_001`. Target-free date validation found 1,165 eligible weekly training dates and 6,509,738 rows from 2003-01-03 through 2025-04-25. No gap, holdout, or immature row entered training.
+
+The compatible `v6_medium_ic_001` source contains 395,850 rows for 350 features over 1,131 dates through 2024-08-30. The runner calculated 11,900 rows for the 34 missing dates from 2024-09-06 through 2025-04-25 in 34.07 seconds. The combined artifact has 407,750 unique date-feature rows over 1,165 dates. Provenance records source hashes, the exact IC definition, missingness policy, feature order, and Validation file identity. The final manifest selects exactly 250 unique features in official Medium order. It shares 240 features with Fold 5 (Jaccard `0.9231`), with 10 additions and 10 removals.
+
+The Medium-350 and Top-250 models used the frozen 300-tree, 0.05 learning-rate, 31-leaf, seed-42 configuration and native missing handling. They trained once on the identical 6,509,738 rows in 180.70 and 131.06 seconds. Model sizes are 992,015 and 984,389 bytes. Both reload checks have maximum absolute prediction difference `0.0`. Peak process memory was not measured reliably; the runner released each trained model before fitting the next component. Runtime before artifact persistence was 362.38 seconds.
+
+All three target-free prediction artifacts contain the same 365,363 canonical identities, 52 dates from 2025-08-22 through 2026-08-14, no duplicates, and only finite predictions. Component files retain raw predictions; the ensemble separately applies per-date average ranks and fixed 0.50/0.50 weights. Metadata records `target_columns_accessed: []`.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Frozen policy | `4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e` |
+| Final feature manifest | `6af69e4f0862434c7d5bbcb318ad70a83bc65037f0f88b6af9fb3cee38cb4a38` |
+| Medium model | `1d3994ce989b4e3607f8e81d922abd70053f595842161ceba7de140bbdd10d6f` |
+| Top-250 model | `370912bc83235e1883626f47ae861517aa0956e6e303e060fe4ab22c7a9d1479` |
+| Medium predictions | `b92626933618b3bec31de2a73af18dc413c0510342965a951bc974eca93d5035` |
+| Top-250 predictions | `255ef598733f4983e7552a3c8a907eff3b1f2bd606905e018c48228c2aa16613` |
+| Ensemble predictions | `7f0b0d194b7eafbb55d7f5183509c5c938fad97c39caf3b9ce09ecc2a5c63669` |
+| IC extension | `f66492f6abff6773a09e55c80f826bc5a1460fad2ad48e2698d669254eea76b0` |
+| Combined per-date IC | `0ee40d632e3c3a27cfb188d1e3e9d0d30f9b0564df86cc4fae01ca0f7a3de952` |
+| Final IC summary | `a5d61db276de65f87e5da2357ba8e60e0d9ca255ab1fb4709a75a4802ebabd54` |
+| IC provenance | `d5e7c0a13f4bdc1e720beb99b3c6098671a0ad36f094eb8b2ae56dcbacb6a9c9` |
+
+`PREPARATION_COMPLETED.json` exists and all recorded hashes verify. No `scoring/` directory or `FINAL_EVALUATION_COMPLETED.json` exists. No holdout target, NCORR, Legacy CORR, or final performance result was accessed or calculated; the holdout targets remain sealed and production scoring remains disabled.
+
+The preparation is sealed in version control at `docs/manifests/v6.0_v1_final_001_preparation_seal.json`, SHA-256 `dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297`. The seal includes all 11 full preparation artifact hashes, metadata hash, completion-marker hash, recorded Git identity, empty target-access record, and explicit `prepared` / `unscored` / `sealed` status. The immutable completion marker did not record a timestamp, so the seal records that timestamp as unavailable rather than inferring one from filesystem metadata.
 
 ## Remaining Validation-Design Questions
 

@@ -890,3 +890,25 @@ Future commands are:
 ```
 
 Real command execution remains disabled until Task 22B separately reviews and wires the runner. This task performed no real model fit, IC calculation, holdout prediction, target access, or scoring. Software state and hash checks reduce accidental leakage and mutation but cannot prevent deliberate bypass by someone with direct filesystem access. Existing experiments and the frozen V1 manifest were not modified. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 22B: Frozen V1 Final-Holdout Preparation
+
+Enabled the production preparation path while leaving real scoring disabled, added a synthetic two-model orchestration test, and executed the approved command exactly once:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.final_holdout prepare --version v6.0 --evaluation-id v6_v1_final_001 --run --confirm-final-preparation
+```
+
+Preflight verified commit `cc176c439c50a17f7bec7197545d5c3e4517e3a6`, frozen policy hash `4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e`, 350 ordered Medium features, an unused destination, 618 GB free disk, approximately 34 GB available memory, exact protected partitions, and 120 passing pre-existing tests. The output records the same commit with a dirty tree because the reviewed Task 22B implementation and documentation were intentionally uncommitted during execution.
+
+The runner reused 1,131 dates from `v6_medium_ic_001`, then calculated the 34 missing eligible dates from 2024-09-06 through 2025-04-25 using the unchanged pairwise-complete average-rank Spearman definition. This took 34.07 seconds and produced 11,900 new rows. Combined coverage is 1,165 dates and 407,750 unique feature-date rows. The deterministic final selection contains 250 features in official Medium order; it overlaps Fold 5 on 240 features (Jaccard `0.9231`) and swaps 10 in and 10 out. No alternate K or policy was evaluated.
+
+Both components trained once on the identical 6,509,738 mature rows across 1,165 dates ending 2025-04-25. Medium-350 trained in 180.70 seconds and saved a 992,015-byte, 300-tree model; Top-250 trained in 131.06 seconds and saved a 984,389-byte, 300-tree model. Both use the frozen LightGBM parameters and reload with zero prediction difference. Runtime before final artifact persistence was 362.38 seconds. Peak memory was not measured reliably, and no predictive-performance claim follows from runtime or model size.
+
+Each raw component prediction file and the fixed 50/50 per-date rank ensemble contains 365,363 identical canonical rows over all 52 dates from 2025-08-22 through 2026-08-14, with no duplicates or nonfinite values. The preparation metadata records `target_columns_accessed: []`. The copied policy, manifest, two models, three predictions, IC extension, combined IC, IC summary, and IC provenance all have verified SHA-256 hashes; the detailed table is retained in `docs/data/DATA_GUIDE_v6.0.md` and preparation metadata.
+
+`PREPARATION_COMPLETED.json` is valid. No scoring directory or final-evaluation marker exists, and the scoring CLI still exits even with explicit scoring flags. No holdout target was requested, read, inspected, summarized, or scored. NCORR and Legacy CORR were not calculated. There is no final holdout performance result; the targets remain sealed pending separate review.
+
+Checkpoint Task 22B.1 records the immutable preparation identity in `docs/manifests/v6.0_v1_final_001_preparation_seal.json`, SHA-256 `dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297`. The seal captures all 11 full artifact hashes, metadata and completion-marker hashes, the preparation Git state, empty target-access record, and `prepared` / `unscored` / `sealed` status. No timestamp was present in the completion marker, so none was invented. This integrity record does not claim protection against deliberate direct filesystem bypass.

@@ -2,17 +2,24 @@ import copy
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
-from src.data import prepare_v6_final_training_data, prepare_v6_holdout_features
+from src.data import (
+    V6HoldoutFeatures,
+    V6TrainingData,
+    prepare_v6_final_training_data,
+    prepare_v6_holdout_features,
+)
 from src.feature_quality import IC_COLUMNS, build_final_training_ic_summary
 from src.feature_selection import select_final_top250
 from src.final_holdout import (
     build_fixed_holdout_ensemble,
     main,
     require_scoring_authorization,
+    run_final_preparation,
     save_final_preparation,
     save_final_scoring,
     verify_final_preparation,
@@ -127,6 +134,92 @@ class FinalHoldoutTest(unittest.TestCase):
             main(["prepare","--version","v6.0","--evaluation-id","x"])
         with self.assertRaisesRegex(SystemExit, "scoring requires"):
             main(["score","--version","v6.0","--evaluation-id","x"])
+        with self.assertRaisesRegex(SystemExit, "scoring remains intentionally disabled"):
+            main([
+                "score", "--version", "v6.0", "--evaluation-id", "x", "--run",
+                "--authorize-holdout-target-access", "--confirm-final-scoring",
+            ])
+
+    def test_production_preparation_orchestrates_two_target_free_models(self):
+        rng = np.random.default_rng(42)
+        train_features = pd.DataFrame(
+            rng.normal(size=(40, 350)).astype(np.float32), columns=FEATURES
+        )
+        target = pd.Series(rng.normal(size=40), index=train_features.index)
+        identities = pd.DataFrame(
+            [
+                (date, f"ticker_{row}", f"figi_{row}")
+                for date in HOLDOUT_DATES
+                for row in range(2)
+            ],
+            columns=["date", "numerai_ticker", "composite_figi"],
+        )
+        holdout_features = pd.DataFrame(
+            rng.normal(size=(len(identities), 350)).astype(np.float32), columns=FEATURES
+        )
+        summary = pd.DataFrame(
+            {
+                "feature": FEATURES,
+                "train_start": "2003-01-03",
+                "train_end": "2025-04-25",
+                "training_dates": 1165,
+                "valid_dates": 1165,
+                "mean_ic": np.linspace(-0.02, 0.02, 350),
+            }
+        )
+        summary["absolute_mean_ic"] = summary["mean_ic"].abs()
+        provenance = {
+            "existing_dates": 1131,
+            "additional_dates": 34,
+            "combined_dates": 1165,
+            "holdout_target_columns_accessed": [],
+        }
+        captured = {}
+
+        def fake_save(*args, **kwargs):
+            captured["model_keys"] = set(args[2])
+            captured["medium"] = args[3]
+            captured["top250"] = args[4]
+            captured["ensemble"] = args[5]
+            captured["details"] = kwargs["preparation_details"]
+            destination = Path(kwargs["output_root"]) / "v6.0" / "final_holdout" / args[0]
+            preparation = destination / "preparation"
+            preparation.mkdir(parents=True)
+            (preparation / "metadata.json").write_text(
+                '{"preparation_details": {}}', encoding="utf-8"
+            )
+            return destination
+
+        with tempfile.TemporaryDirectory() as temp, patch(
+            "src.final_holdout.resolve_v6_numeric_feature_set", return_value=FEATURES
+        ), patch(
+            "src.final_holdout.extend_final_training_ic",
+            return_value=(pd.DataFrame(), pd.DataFrame(), summary, provenance),
+        ), patch(
+            "src.final_holdout.load_v6_final_training_data",
+            return_value=V6TrainingData(train_features, target),
+        ), patch(
+            "src.final_holdout.load_v6_final_holdout_features",
+            return_value=V6HoldoutFeatures(holdout_features, identities),
+        ), patch(
+            "src.final_holdout.verify_observed_final_training_dates",
+            return_value=(
+                pd.date_range("2003-01-03", periods=1165, freq="7D")
+                .strftime("%Y-%m-%d")
+                .tolist(),
+                len(train_features),
+            ),
+        ), patch("src.final_holdout.save_final_preparation", side_effect=fake_save):
+            destination = run_final_preparation(
+                "synthetic_orchestration", data_dir=Path(temp), output_root=Path(temp)
+            )
+        self.assertTrue(destination.name == "synthetic_orchestration")
+        self.assertEqual(captured["model_keys"], {"medium", "top250"})
+        self.assertEqual(len(captured["medium"]), len(identities))
+        self.assertEqual(len(captured["top250"]), len(identities))
+        self.assertEqual(len(captured["ensemble"]), len(identities))
+        self.assertNotIn("target_jupiter_60", captured["medium"].columns)
+        self.assertEqual(captured["details"]["ic"]["additional_dates"], 34)
 
 
 if __name__ == "__main__":

@@ -9,11 +9,13 @@ import shutil
 import tempfile
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+import psutil
 import pyarrow.parquet as pq
 
 from src.config import DEFAULT_LIGHTGBM_PARAMS, get_research_config
@@ -44,7 +46,13 @@ from src.models import (
 )
 from src.paths import OUTPUT_ROOT
 from src.paths import resolve_data_dir
-from src.scoring_references import load_final_holdout_neutralizers_for_date
+from src.scoring_references import (
+    V6_NEUTRALIZER_COLUMN_COUNT,
+    V6_VALIDATION_NEUTRALIZER_SHA256,
+    load_final_holdout_neutralizers_for_date,
+    ordered_neutralizer_columns,
+    validation_neutralizer_path,
+)
 from src.v1_policy import V1_POLICY_PATH, load_v1_policy
 
 
@@ -55,6 +63,16 @@ SOURCE_IC_ANALYSIS_ID = "v6_medium_ic_001"
 EXPECTED_EXISTING_IC_DATES = 1_131
 EXPECTED_ADDITIONAL_IC_DATES = 34
 EXPECTED_FINAL_IC_DATES = 1_165
+PREPARATION_SEAL_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "docs"
+    / "manifests"
+    / "v6.0_v1_final_001_preparation_seal.json"
+)
+PREPARATION_SEAL_SHA256 = (
+    "dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297"
+)
+RESEARCH_ENSEMBLE_ID = "v6_medium_top250_rank_equal_001"
 
 
 def sha256_file(path: Path) -> str:
@@ -63,6 +81,10 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def canonical_holdout_predictions(frame: pd.DataFrame, name: str) -> pd.DataFrame:
@@ -495,6 +517,44 @@ def verify_final_preparation(evaluation_dir: Path) -> dict:
     return metadata
 
 
+def verify_preparation_seal(
+    evaluation_dir: Path,
+    seal_path: Path = PREPARATION_SEAL_PATH,
+) -> tuple[dict, dict]:
+    """Verify the committed seal and every immutable preparation identity."""
+    if sha256_file(seal_path) != PREPARATION_SEAL_SHA256:
+        raise ValueError("Committed preparation seal hash changed.")
+    seal = json.loads(seal_path.read_text(encoding="utf-8"))
+    if (
+        seal.get("evaluation_id") != evaluation_dir.name
+        or seal.get("policy_id") != "numerai_classic_v6_v1"
+        or seal.get("frozen_policy_sha256")
+        != "4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e"
+    ):
+        raise ValueError("Preparation seal identity is incompatible.")
+    preparation = evaluation_dir / "preparation"
+    metadata = verify_final_preparation(evaluation_dir)
+    if sha256_file(preparation / "metadata.json") != seal["preparation_metadata"]["sha256"]:
+        raise ValueError("Preparation metadata does not match the committed seal.")
+    if sha256_file(preparation / "PREPARATION_COMPLETED.json") != seal["preparation_completion_marker"]["sha256"]:
+        raise ValueError("Preparation completion marker does not match the seal.")
+    expected_hashes = seal.get("preparation_artifact_sha256", {})
+    if len(expected_hashes) != 11 or expected_hashes != metadata.get("artifact_sha256"):
+        raise ValueError("Preparation artifact hash inventory differs from the seal.")
+    for name, expected in expected_hashes.items():
+        if sha256_file(preparation / name) != expected:
+            raise ValueError(f"Sealed preparation artifact changed: {name}")
+    if metadata.get("target_columns_accessed") != [] or seal.get("target_columns_accessed") != []:
+        raise ValueError("Preparation target-access record is not empty.")
+    if seal.get("status") != {
+        "preparation": "prepared",
+        "scoring": "unscored",
+        "holdout_targets": "sealed",
+    }:
+        raise ValueError("Preparation seal no longer records the pre-scoring state.")
+    return seal, metadata
+
+
 def require_scoring_authorization(evaluation_dir: Path, authorized: bool) -> dict:
     if not authorized:
         raise PermissionError("Explicit holdout target-access authorization is required.")
@@ -524,6 +584,13 @@ def load_authorized_holdout_targets(
     ).to_pandas()
     if len(frame) != 365_363 or frame["date"].nunique() != 52:
         raise ValueError("Authorized holdout targets have unexpected coverage.")
+    expected_dates = set(
+        pd.date_range(config.holdout_start, config.holdout_end, freq="7D").strftime("%Y-%m-%d")
+    )
+    if set(frame["date"].astype(str)) != expected_dates:
+        raise ValueError("Authorized holdout targets contain unsupported dates.")
+    if frame.duplicated(IDENTITY_COLUMNS).any():
+        raise ValueError("Authorized holdout targets contain duplicate identities.")
     if frame[config.target_column].isna().any() or not np.isfinite(frame[config.target_column]).all():
         raise ValueError("Authorized holdout targets are incomplete or nonfinite.")
     return frame.sort_values(IDENTITY_COLUMNS, na_position="first").reset_index(drop=True)
@@ -558,6 +625,110 @@ def score_authorized_final_predictions(
     return per_date, metrics
 
 
+def summarize_final_candidate(per_date: pd.DataFrame) -> dict:
+    """Create the predeclared final summaries from already-scored weekly rows."""
+    scores = per_date["ncorr"].astype(float)
+    legacy = per_date["numerai_corr_jupiter_60"].astype(float)
+    ncorr_std = float(scores.std())
+    legacy_std = float(legacy.std())
+    return {
+        "scored_dates": int(len(per_date)),
+        "scored_identities": int(per_date["observation_count"].sum()),
+        "mean_ncorr": float(scores.mean()),
+        "ncorr_std": ncorr_std,
+        "ncorr_mean_std_ratio": float(scores.mean() / ncorr_std),
+        "positive_ncorr_date_percentage": float((scores > 0).mean() * 100),
+        "median_weekly_ncorr": float(scores.median()),
+        "worst_weekly_ncorr": float(scores.min()),
+        "best_weekly_ncorr": float(scores.max()),
+        "p10_weekly_ncorr": float(scores.quantile(0.10)),
+        "mean_legacy_corr": float(legacy.mean()),
+        "legacy_corr_std": legacy_std,
+        "legacy_corr_mean_std_ratio": float(legacy.mean() / legacy_std),
+    }
+
+
+def paired_weekly_diagnostics(
+    primary: pd.DataFrame,
+    component: pd.DataFrame,
+    label: str,
+) -> dict:
+    joined = primary[["date", "ncorr"]].merge(
+        component[["date", "ncorr"]], on="date", suffixes=("_primary", "_component"), validate="one_to_one"
+    )
+    difference = joined["ncorr_primary"] - joined["ncorr_component"]
+    return {
+        "comparison": label,
+        "date_count": int(len(difference)),
+        "mean_difference": float(difference.mean()),
+        "median_difference": float(difference.median()),
+        "std_difference": float(difference.std()),
+        "outperforming_date_percentage": float((difference > 0).mean() * 100),
+        "p10_difference": float(difference.quantile(0.10)),
+        "p90_difference": float(difference.quantile(0.90)),
+        "largest_improvement": float(difference.max()),
+        "largest_decline": float(difference.min()),
+    }
+
+
+def temporal_final_summary(per_date: pd.DataFrame) -> dict:
+    dated = per_date.assign(year=per_date["date"].str.slice(0, 4).astype(int))
+    periods = []
+    for year, group in dated.groupby("year", sort=True):
+        summary = summarize_final_candidate(group)
+        summary["year"] = int(year)
+        periods.append(summary)
+    best = per_date.loc[per_date["ncorr"].idxmax()]
+    worst = per_date.loc[per_date["ncorr"].idxmin()]
+    return {
+        "per_year": periods,
+        "best_week": {"date": str(best["date"]), "ncorr": float(best["ncorr"])},
+        "worst_week": {"date": str(worst["date"]), "ncorr": float(worst["ncorr"])},
+    }
+
+
+def compare_final_to_research(
+    final_summary: dict,
+    research_metrics_path: Path,
+    research_per_date_path: Path,
+) -> dict:
+    research = json.loads(research_metrics_path.read_text(encoding="utf-8"))
+    research_dates = pd.read_parquet(research_per_date_path)
+    ncorr = research["ncorr"]["overall"]
+    legacy = research["legacy_corr"]["overall"]
+    research_summary = {
+        "scored_dates": int(ncorr["date_count"]),
+        "scored_identities": int(ncorr["observation_count"]),
+        "mean_ncorr": float(ncorr["mean"]),
+        "ncorr_std": float(ncorr["std"]),
+        "ncorr_mean_std_ratio": float(ncorr["sharpe_like"]),
+        "positive_ncorr_date_percentage": float(ncorr["positive_date_percentage"]),
+        "worst_weekly_ncorr": float(research_dates["ncorr"].min()),
+        "p10_weekly_ncorr": float(research_dates["ncorr"].quantile(0.10)),
+        "mean_legacy_corr": float(legacy["mean"]),
+    }
+    keys = (
+        "mean_ncorr", "ncorr_std", "ncorr_mean_std_ratio",
+        "positive_ncorr_date_percentage", "worst_weekly_ncorr",
+        "p10_weekly_ncorr", "mean_legacy_corr",
+    )
+    return {
+        "research_experiment_id": RESEARCH_ENSEMBLE_ID,
+        "research_scope": "Research Validation OOF model-selection evidence",
+        "final_scope": "Independent fixed-model final holdout evidence",
+        "research": research_summary,
+        "final": final_summary,
+        "absolute_difference_final_minus_research": {
+            key: float(final_summary[key] - research_summary[key]) for key in keys
+        },
+        "relative_mean_ncorr_difference": float(
+            final_summary["mean_ncorr"] / research_summary["mean_ncorr"] - 1
+        ),
+        "periods_are_not_exchangeable": True,
+        "automatic_pass_fail_threshold": None,
+    }
+
+
 def save_final_scoring(
     evaluation_dir: Path,
     preparation_metadata: dict,
@@ -590,6 +761,271 @@ def save_final_scoring(
     return scoring
 
 
+def verify_final_scoring_reference(data_dir: Path | None = None) -> dict:
+    path = validation_neutralizer_path(data_dir)
+    actual_hash = sha256_file(path)
+    if actual_hash != V6_VALIDATION_NEUTRALIZER_SHA256:
+        raise ValueError("Official v6 neutralizer hash changed.")
+    columns = ordered_neutralizer_columns(path, V6_NEUTRALIZER_COLUMN_COUNT)
+    return {
+        "path": "data/v6.0/validation_neutralizer.parquet",
+        "sha256": actual_hash,
+        "column_count": len(columns),
+        "columns_start": columns[0],
+        "columns_end": columns[-1],
+        "numerai_tools_version": "0.7.2",
+        "primary_metric": "NCORR",
+        "api_display_name": "neutral_corr",
+        "metric_version": 1,
+        "diagnostic_metric": "Legacy CORR",
+        "nmmc_calculated": False,
+        "nbmc_calculated": False,
+    }
+
+
+def _write_json_once(path: Path, payload: dict) -> None:
+    with path.open("x", encoding="utf-8") as file:
+        json.dump(payload, file, indent=2, allow_nan=False)
+
+
+def persist_final_evaluation(
+    evaluation_dir: Path,
+    candidate_per_date: dict[str, pd.DataFrame],
+    aggregate: dict,
+    paired: dict,
+    temporal: dict,
+    research_comparison: dict,
+    scoring_reference: dict,
+    runtime: dict,
+    preparation_seal: dict,
+) -> Path:
+    """Persist already-calculated results and write the completion marker last."""
+    scoring = evaluation_dir / "scoring"
+    required_state = {
+        "SCORING_STARTED.json", "AUTHORIZATION.json", "TARGET_ACCESS.json"
+    }
+    if not scoring.is_dir() or not required_state.issubset({p.name for p in scoring.iterdir()}):
+        raise ValueError("Final scoring state records are incomplete.")
+    if (scoring / "FINAL_EVALUATION_COMPLETED.json").exists():
+        raise FileExistsError("Final evaluation already completed.")
+    combined = pd.concat(
+        [frame.assign(candidate=name) for name, frame in candidate_per_date.items()],
+        ignore_index=True,
+    )
+    combined.to_parquet(scoring / "per_date_metrics.parquet", index=False)
+    _write_json_once(scoring / "aggregate_metrics.json", aggregate)
+    _write_json_once(scoring / "paired_diagnostics.json", paired)
+    _write_json_once(scoring / "temporal_summaries.json", temporal)
+    _write_json_once(scoring / "research_oof_comparison.json", research_comparison)
+    metadata = {
+        "evaluation_id": evaluation_dir.name,
+        "state": SCORING_COMPLETE,
+        "primary_candidate": "ensemble",
+        "diagnostic_candidates": ["medium", "top250"],
+        "policy_id": preparation_seal["policy_id"],
+        "preparation_seal_sha256": PREPARATION_SEAL_SHA256,
+        "scoring_reference": scoring_reference,
+        "runtime": runtime,
+        "target_values_persisted": False,
+        "automatic_model_reselection": False,
+        "git": current_git_state(),
+    }
+    _write_json_once(scoring / "scoring_metadata.json", metadata)
+    artifact_names = [
+        "SCORING_STARTED.json", "AUTHORIZATION.json", "TARGET_ACCESS.json",
+        "per_date_metrics.parquet", "aggregate_metrics.json",
+        "paired_diagnostics.json", "temporal_summaries.json",
+        "research_oof_comparison.json", "scoring_metadata.json",
+    ]
+    hashes = {name: sha256_file(scoring / name) for name in artifact_names}
+    _write_json_once(scoring / "artifact_hashes.json", hashes)
+    hashes["artifact_hashes.json"] = sha256_file(scoring / "artifact_hashes.json")
+    _write_json_once(
+        scoring / "FINAL_EVALUATION_COMPLETED.json",
+        {
+            "state": SCORING_COMPLETE,
+            "completed_at_utc": utc_now(),
+            "artifact_sha256": hashes,
+        },
+    )
+    return scoring
+
+
+def load_final_evaluation_report(evaluation_dir: Path) -> dict:
+    """Load verified saved metrics without reading targets or recalculating scores."""
+    scoring = evaluation_dir / "scoring"
+    marker_path = scoring / "FINAL_EVALUATION_COMPLETED.json"
+    if not marker_path.is_file():
+        raise FileNotFoundError("Final evaluation is not complete.")
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    if marker.get("state") != SCORING_COMPLETE:
+        raise ValueError("Final evaluation completion state is invalid.")
+    for name, expected in marker.get("artifact_sha256", {}).items():
+        if sha256_file(scoring / name) != expected:
+            raise ValueError(f"Final scoring artifact hash mismatch: {name}")
+    return {
+        "aggregate": json.loads((scoring / "aggregate_metrics.json").read_text()),
+        "paired": json.loads((scoring / "paired_diagnostics.json").read_text()),
+        "temporal": json.loads((scoring / "temporal_summaries.json").read_text()),
+        "research_comparison": json.loads(
+            (scoring / "research_oof_comparison.json").read_text()
+        ),
+        "metadata": json.loads((scoring / "scoring_metadata.json").read_text()),
+        "per_date": pd.read_parquet(scoring / "per_date_metrics.parquet"),
+        "completion": marker,
+    }
+
+
+def run_final_scoring(
+    evaluation_id: str,
+    *,
+    authorized: bool,
+    confirmed: bool,
+    data_dir: Path | None = None,
+    output_root: Path = OUTPUT_ROOT,
+    seal_path: Path = PREPARATION_SEAL_PATH,
+    target_loader=None,
+    score_function=None,
+    reference_verifier=None,
+) -> Path:
+    """Execute the one authorized scoring transaction from sealed predictions."""
+    if not authorized or not confirmed:
+        raise PermissionError("Both target-access authorization flags are required.")
+    evaluation_dir = output_root / "v6.0" / "final_holdout" / evaluation_id
+    scoring = evaluation_dir / "scoring"
+    if scoring.exists():
+        raise FileExistsError("A final scoring attempt already exists; retries are forbidden.")
+    seal, preparation_metadata = verify_preparation_seal(evaluation_dir, seal_path)
+    preparation = evaluation_dir / "preparation"
+    predictions = {
+        name: canonical_holdout_predictions(
+            pd.read_parquet(preparation / f"{name}_predictions.parquet"), name
+        )
+        for name in ("medium", "top250", "ensemble")
+    }
+    identity = predictions["ensemble"][IDENTITY_COLUMNS]
+    if any(not frame[IDENTITY_COLUMNS].equals(identity) for frame in predictions.values()):
+        raise ValueError("Sealed candidate identities do not match.")
+    _, _, rebuilt = build_fixed_holdout_ensemble(
+        predictions["medium"], predictions["top250"]
+    )
+    if not np.array_equal(
+        rebuilt["prediction"].to_numpy(), predictions["ensemble"]["prediction"].to_numpy()
+    ):
+        raise ValueError("Sealed ensemble does not match the frozen 50/50 policy.")
+    reference_verifier = reference_verifier or verify_final_scoring_reference
+    scoring_reference = reference_verifier(data_dir)
+    if (
+        scoring_reference.get("sha256") != V6_VALIDATION_NEUTRALIZER_SHA256
+        or scoring_reference.get("column_count") != 300
+    ):
+        raise ValueError("Official scoring reference identity is incompatible.")
+    scoring.mkdir(exist_ok=False)
+    started_at = utc_now()
+    _write_json_once(
+        scoring / "SCORING_STARTED.json",
+        {
+            "state": "scoring_started",
+            "started_at_utc": started_at,
+            "evaluation_id": evaluation_id,
+            "preparation_seal_sha256": PREPARATION_SEAL_SHA256,
+            "preparation_metadata_sha256": seal["preparation_metadata"]["sha256"],
+            "target_accessed": False,
+        },
+    )
+    _write_json_once(
+        scoring / "AUTHORIZATION.json",
+        {
+            "authorized_at_utc": utc_now(),
+            "run": True,
+            "authorize_holdout_target_access": True,
+            "confirm_final_scoring": True,
+            "scope": "target_jupiter_60 for the 52 frozen final-holdout dates only",
+        },
+    )
+    started = time.perf_counter()
+    rss_start = psutil.Process().memory_info().rss
+    target_loader = target_loader or load_authorized_holdout_targets
+    score_function = score_function or score_authorized_final_predictions
+    try:
+        targets = target_loader(
+            evaluation_dir, authorized=True, data_dir=data_dir
+        )
+        if not predictions["ensemble"][IDENTITY_COLUMNS].equals(
+            targets[IDENTITY_COLUMNS].reset_index(drop=True)
+        ):
+            raise ValueError("Authorized targets do not match sealed prediction identities.")
+        _write_json_once(
+            scoring / "TARGET_ACCESS.json",
+            {
+                "first_authorized_access_at_utc": utc_now(),
+                "columns": [*IDENTITY_COLUMNS, "target_jupiter_60"],
+                "date_start": "2025-08-22",
+                "date_end": "2026-08-14",
+                "date_count": 52,
+                "row_count": 365363,
+                "other_target_columns_accessed": [],
+            },
+        )
+        candidate_per_date = {}
+        for name in ("medium", "top250", "ensemble"):
+            candidate_per_date[name], _ = score_function(predictions[name], targets)
+        del targets
+        gc.collect()
+        aggregate = {
+            name: summarize_final_candidate(frame)
+            for name, frame in candidate_per_date.items()
+        }
+        paired = {
+            "ensemble_minus_medium": paired_weekly_diagnostics(
+                candidate_per_date["ensemble"], candidate_per_date["medium"],
+                "Frozen V1 Ensemble minus Medium LightGBM",
+            ),
+            "ensemble_minus_top250": paired_weekly_diagnostics(
+                candidate_per_date["ensemble"], candidate_per_date["top250"],
+                "Frozen V1 Ensemble minus Top-250 LightGBM",
+            ),
+        }
+        temporal = {
+            name: temporal_final_summary(frame)
+            for name, frame in candidate_per_date.items()
+        }
+        research_dir = output_root / "v6.0" / "ensembles" / RESEARCH_ENSEMBLE_ID
+        research_comparison = compare_final_to_research(
+            aggregate["ensemble"],
+            research_dir / "metrics.json",
+            research_dir / "per_date_metrics.parquet",
+        )
+        runtime = {
+            "scoring_seconds_before_artifact_persistence": time.perf_counter() - started,
+            "rss_bytes_start": rss_start,
+            "rss_bytes_end": psutil.Process().memory_info().rss,
+            "peak_rss_measured": False,
+        }
+        destination = persist_final_evaluation(
+            evaluation_dir, candidate_per_date, aggregate, paired, temporal,
+            research_comparison, scoring_reference, runtime, seal,
+        )
+    except Exception as error:
+        if not (scoring / "SCORING_FAILED.json").exists():
+            _write_json_once(
+                scoring / "SCORING_FAILED.json",
+                {
+                    "state": "scoring_failed",
+                    "failed_at_utc": utc_now(),
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                    "traceback": traceback.format_exc(),
+                    "retry_forbidden": True,
+                },
+            )
+        raise
+    if verify_final_preparation(evaluation_dir) != preparation_metadata:
+        raise ValueError("Preparation metadata changed during scoring.")
+    load_final_evaluation_report(evaluation_dir)
+    return destination
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -604,6 +1040,9 @@ def main(argv: list[str] | None = None) -> None:
     score.add_argument("--run", action="store_true")
     score.add_argument("--authorize-holdout-target-access", action="store_true")
     score.add_argument("--confirm-final-scoring", action="store_true")
+    report = subparsers.add_parser("report")
+    report.add_argument("--version", required=True)
+    report.add_argument("--evaluation-id", required=True)
     args = parser.parse_args(argv)
     if args.version != "v6.0":
         raise SystemExit("Final holdout supports only v6.0.")
@@ -616,9 +1055,20 @@ def main(argv: list[str] | None = None) -> None:
             save_preparation_failure(args.evaluation_id, error)
             raise
         return
+    if args.command == "report":
+        evaluation_dir = OUTPUT_ROOT / "v6.0" / "final_holdout" / args.evaluation_id
+        saved = load_final_evaluation_report(evaluation_dir)
+        print(json.dumps(saved["aggregate"], indent=2, allow_nan=False))
+        return
     if not args.run or not args.authorize_holdout_target_access or not args.confirm_final_scoring:
         raise SystemExit("Final scoring requires explicit run, target access, and scoring confirmation.")
-    raise SystemExit("Real final scoring remains intentionally disabled.")
+    print(
+        run_final_scoring(
+            args.evaluation_id,
+            authorized=args.authorize_holdout_target_access,
+            confirmed=args.confirm_final_scoring,
+        )
+    )
 
 
 if __name__ == "__main__":

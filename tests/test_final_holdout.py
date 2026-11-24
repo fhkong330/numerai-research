@@ -1,4 +1,5 @@
 import copy
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,10 +17,13 @@ from src.data import (
 from src.feature_quality import IC_COLUMNS, build_final_training_ic_summary
 from src.feature_selection import select_final_top250
 from src.final_holdout import (
+    IDENTITY_COLUMNS,
     build_fixed_holdout_ensemble,
+    load_final_evaluation_report,
     main,
     require_scoring_authorization,
     run_final_preparation,
+    run_final_scoring,
     save_final_preparation,
     save_final_scoring,
     verify_final_preparation,
@@ -134,11 +138,91 @@ class FinalHoldoutTest(unittest.TestCase):
             main(["prepare","--version","v6.0","--evaluation-id","x"])
         with self.assertRaisesRegex(SystemExit, "scoring requires"):
             main(["score","--version","v6.0","--evaluation-id","x"])
-        with self.assertRaisesRegex(SystemExit, "scoring remains intentionally disabled"):
+        with patch("src.final_holdout.run_final_scoring", return_value=Path("scoring")) as run:
             main([
                 "score", "--version", "v6.0", "--evaluation-id", "x", "--run",
                 "--authorize-holdout-target-access", "--confirm-final-scoring",
             ])
+            run.assert_called_once_with("x", authorized=True, confirmed=True)
+
+    def test_production_scoring_is_one_shot_and_report_is_target_free(self):
+        medium = holdout_frame(False)
+        top250 = holdout_frame(True)
+        left, right, ensemble = build_fixed_holdout_ensemble(medium, top250)
+        targets = left[IDENTITY_COLUMNS].copy()
+        targets["target_jupiter_60"] = np.tile([0.25, 0.5, 0.75], 52)
+
+        def synthetic_score(predictions, _targets):
+            rows = []
+            for index, (date, group) in enumerate(predictions.groupby("date", sort=True)):
+                rows.append(
+                    {
+                        "date": date,
+                        "fold_id": 1,
+                        "numerai_corr_jupiter_60": 0.01 + index / 10000,
+                        "observation_count": len(group),
+                        "ncorr": 0.02 + index / 10000,
+                    }
+                )
+            return pd.DataFrame(rows), {"synthetic": True}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            a = root / "a.txt"; b = root / "b.txt"
+            a.write_text("a"); b.write_text("b")
+            evaluation = save_final_preparation(
+                "synthetic_score", {"policy_id":"medium_top250_abs_mean_ic_v1","selected_feature_count":250},
+                {"medium":a,"top250":b}, medium, top250, ensemble,
+                training_dates=["2025-04-25"], output_root=root,
+                git_state={"synthetic":True}, _synthetic_expected_rows=len(ensemble),
+            )
+            research = root / "v6.0" / "ensembles" / "v6_medium_top250_rank_equal_001"
+            research.mkdir(parents=True)
+            research_metrics = {
+                "ncorr": {"overall": {"date_count":52,"observation_count":156,"mean":0.02,"std":0.01,"sharpe_like":2.0,"positive_date_percentage":100.0}},
+                "legacy_corr": {"overall": {"mean":0.01}},
+            }
+            (research / "metrics.json").write_text(json.dumps(research_metrics))
+            pd.DataFrame({"ncorr": np.linspace(0.0, 0.04, 52)}).to_parquet(
+                research / "per_date_metrics.parquet", index=False
+            )
+            preparation_metadata = verify_final_preparation(evaluation)
+            fake_seal = {
+                "policy_id": "numerai_classic_v6_v1",
+                "preparation_metadata": {"sha256": "metadata-hash"},
+            }
+            with patch(
+                "src.final_holdout.verify_preparation_seal",
+                return_value=(fake_seal, preparation_metadata),
+            ), patch(
+                "src.final_holdout.load_authorized_holdout_targets",
+                return_value=targets,
+            ), patch(
+                "src.final_holdout.score_authorized_final_predictions",
+                side_effect=synthetic_score,
+            ), patch(
+                "src.final_holdout.verify_final_scoring_reference",
+                return_value={
+                    "sha256": "1ae870b17d501b8d9ec114ab2096eece342812c424a826f44a772087a82c6c6f",
+                    "column_count": 300,
+                },
+            ):
+                scoring = run_final_scoring(
+                    "synthetic_score", authorized=True, confirmed=True,
+                    output_root=root, seal_path=root / "seal.json",
+                )
+            report = load_final_evaluation_report(evaluation)
+            self.assertTrue((scoring / "SCORING_STARTED.json").is_file())
+            self.assertTrue((scoring / "AUTHORIZATION.json").is_file())
+            self.assertTrue((scoring / "TARGET_ACCESS.json").is_file())
+            self.assertTrue((scoring / "FINAL_EVALUATION_COMPLETED.json").is_file())
+            self.assertEqual(set(report["aggregate"]), {"medium", "top250", "ensemble"})
+            self.assertEqual(len(report["per_date"]), 156)
+            self.assertFalse(any("target" in path.name.lower() for path in scoring.glob("*.parquet")))
+            with self.assertRaisesRegex(FileExistsError, "attempt already exists"):
+                run_final_scoring(
+                    "synthetic_score", authorized=True, confirmed=True, output_root=root
+                )
 
     def test_production_preparation_orchestrates_two_target_free_models(self):
         rng = np.random.default_rng(42)

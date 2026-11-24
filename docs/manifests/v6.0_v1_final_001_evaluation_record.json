@@ -1,0 +1,148 @@
+{
+  "record_version": 1,
+  "evaluation_id": "v6_v1_final_001",
+  "policy": {
+    "policy_id": "numerai_classic_v6_v1",
+    "sha256": "4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e",
+    "unchanged": true,
+    "deployment_decision": "retain frozen V1 for initial live deployment without holdout-driven tuning"
+  },
+  "preparation_seal_sha256": "dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297",
+  "final_evaluation_completion_marker_sha256": "6561954612dfc90c1d8fe60b2499a47a424fa244888bb22a79b58abb8ab78a39",
+  "scoring_artifact_sha256": {
+    "SCORING_STARTED.json": "ee15a27a128e73bd3f61c6ee3b9f4e63c525d9d633dceec5c6f0cd9f0ffb27ab",
+    "AUTHORIZATION.json": "b4124ff0cb5ba0b233962812e0f66bd014d8876c9e343a7f598727fe4d59242f",
+    "TARGET_ACCESS.json": "1124e337e9115f4e4a1dc3bbd3eeb4ffb48a91fb8f3f2043aacae6b1481df38e",
+    "per_date_metrics.parquet": "3a0d596faef1a907ac980c3e62221a1811d49727634fbcb5653849760af26ef1",
+    "aggregate_metrics.json": "6945a69fa87aa2268624d708a1408cf85d0b8fa5b2e133ab6114f132b30d01ec",
+    "paired_diagnostics.json": "efd71c4eb9be3b20e8d554cf8c746296b9e50b296ee795f03b6786b3d85622e5",
+    "temporal_summaries.json": "1216a4c2031d62bf8485d0ff1c29f3ae7eda7e058e63d5226478f6ffeba23fb9",
+    "research_oof_comparison.json": "71de1c8f335cb6a114a1e1f9bc8adeabf8950835a6f7f54cbe60b56796adb024",
+    "scoring_metadata.json": "451977176d5251647f71c95559dcaec3eeeb5a49639b6145664794660a574885",
+    "artifact_hashes.json": "f76eddb83798a6cc2bab81ec19b25812a80618bc5bb594e96cec812ebb43c889"
+  },
+  "authorized_target_access": {
+    "first_authorized_access_at_utc": "2026-11-24T04:37:10.231894+00:00",
+    "columns": ["date", "numerai_ticker", "composite_figi", "target_jupiter_60"],
+    "date_start": "2025-08-22",
+    "date_end": "2026-08-14",
+    "date_count": 52,
+    "row_count": 365363,
+    "other_target_columns_accessed": []
+  },
+  "official_scoring_reference": {
+    "path": "data/v6.0/validation_neutralizer.parquet",
+    "sha256": "1ae870b17d501b8d9ec114ab2096eece342812c424a826f44a772087a82c6c6f",
+    "column_count": 300,
+    "columns_start": "neutralizer_column_0",
+    "columns_end": "neutralizer_column_299",
+    "numerai_tools_version": "0.7.2",
+    "primary_metric": "NCORR",
+    "api_display_name": "neutral_corr",
+    "metric_version": 1,
+    "diagnostic_metric": "Legacy CORR",
+    "nmmc_calculated": false,
+    "nbmc_calculated": false
+  },
+  "aggregate_metrics": {
+    "medium": {
+      "scored_dates": 52, "scored_identities": 365363,
+      "mean_ncorr": 0.01591839189446281, "ncorr_std": 0.01674925227507149,
+      "ncorr_mean_std_ratio": 0.950394180769175, "positive_ncorr_date_percentage": 82.6923076923077,
+      "median_weekly_ncorr": 0.017319580291716243, "worst_weekly_ncorr": -0.026575260665678665,
+      "best_weekly_ncorr": 0.04297554436213307, "p10_weekly_ncorr": -0.005572768596823337,
+      "mean_legacy_corr": 0.01350144918203323, "legacy_corr_std": 0.0148325178780179,
+      "legacy_corr_mean_std_ratio": 0.9102600983237417
+    },
+    "top250": {
+      "scored_dates": 52, "scored_identities": 365363,
+      "mean_ncorr": 0.014903430748330872, "ncorr_std": 0.020867727704947138,
+      "ncorr_mean_std_ratio": 0.7141856055941201, "positive_ncorr_date_percentage": 73.07692307692307,
+      "median_weekly_ncorr": 0.01638865058822879, "worst_weekly_ncorr": -0.03514584733576332,
+      "best_weekly_ncorr": 0.05001115243423106, "p10_weekly_ncorr": -0.01257946454907292,
+      "mean_legacy_corr": 0.012290747997880689, "legacy_corr_std": 0.018601788673643444,
+      "legacy_corr_mean_std_ratio": 0.6607293639076354
+    },
+    "ensemble": {
+      "scored_dates": 52, "scored_identities": 365363,
+      "mean_ncorr": 0.01643124430079448, "ncorr_std": 0.019656310260214013,
+      "ncorr_mean_std_ratio": 0.8359271950470109, "positive_ncorr_date_percentage": 80.76923076923077,
+      "median_weekly_ncorr": 0.014882622256185656, "worst_weekly_ncorr": -0.03201642425893106,
+      "best_weekly_ncorr": 0.05074103363989851, "p10_weekly_ncorr": -0.008533506279274287,
+      "mean_legacy_corr": 0.013294330928973232, "legacy_corr_std": 0.0170732069993757,
+      "legacy_corr_mean_std_ratio": 0.7786663003300641
+    }
+  },
+  "paired_component_diagnostics": {
+    "ensemble_minus_medium": {
+      "comparison": "Frozen V1 Ensemble minus Medium LightGBM", "date_count": 52,
+      "mean_difference": 0.0005128524063316728, "median_difference": 0.00021234663713281046,
+      "std_difference": 0.005772845669611321, "outperforming_date_percentage": 51.92307692307693,
+      "p10_difference": -0.00610601437315279, "p90_difference": 0.007351143296746911,
+      "largest_improvement": 0.0139524461053347, "largest_decline": -0.013487156266752476
+    },
+    "ensemble_minus_top250": {
+      "comparison": "Frozen V1 Ensemble minus Top-250 LightGBM", "date_count": 52,
+      "mean_difference": 0.001527813552463609, "median_difference": 0.0013833814305413035,
+      "std_difference": 0.004426593623506834, "outperforming_date_percentage": 57.692307692307686,
+      "p10_difference": -0.0034305722304734704, "p90_difference": 0.007470820821667956,
+      "largest_improvement": 0.013329735622165231, "largest_decline": -0.009235719959191459
+    }
+  },
+  "temporal_summaries": {
+    "medium": {
+      "per_year": [
+        {"year": 2025, "scored_dates": 19, "scored_identities": 132116, "mean_ncorr": 0.0007216829805535813, "ncorr_std": 0.013400707426823389, "ncorr_mean_std_ratio": 0.05385409572550118, "positive_ncorr_date_percentage": 52.63157894736842, "median_weekly_ncorr": 0.0006318575656358122, "worst_weekly_ncorr": -0.026575260665678665, "best_weekly_ncorr": 0.018713871265948572, "p10_weekly_ncorr": -0.01635778161519824, "mean_legacy_corr": 0.0009342915092730617, "legacy_corr_std": 0.012637798230431305, "legacy_corr_mean_std_ratio": 0.07392834513082554},
+        {"year": 2026, "scored_dates": 33, "scored_identities": 233247, "mean_ncorr": 0.024668012178228726, "ncorr_std": 0.011402831714733502, "ncorr_mean_std_ratio": 2.1633233564567473, "positive_ncorr_date_percentage": 100.0, "median_weekly_ncorr": 0.025056380102783323, "worst_weekly_ncorr": 0.0015644479534860718, "best_weekly_ncorr": 0.04297554436213307, "p10_weekly_ncorr": 0.008947846739929164, "mean_legacy_corr": 0.020737085417864842, "legacy_corr_std": 0.010631468748269188, "legacy_corr_mean_std_ratio": 1.9505381531823491}
+      ],
+      "best_week": {"date": "2026-05-22", "ncorr": 0.04297554436213307},
+      "worst_week": {"date": "2025-11-14", "ncorr": -0.026575260665678665}
+    },
+    "top250": {
+      "per_year": [
+        {"year": 2025, "scored_dates": 19, "scored_identities": 132116, "mean_ncorr": -0.005095501922719597, "ncorr_std": 0.01480640273650651, "ncorr_mean_std_ratio": -0.3441417887517122, "positive_ncorr_date_percentage": 31.57894736842105, "median_weekly_ncorr": -0.00844745787056577, "worst_weekly_ncorr": -0.03514584733576332, "best_weekly_ncorr": 0.023660099081496817, "p10_weekly_ncorr": -0.022597993362400048, "mean_legacy_corr": -0.0036409706647882456, "legacy_corr_std": 0.015354216955263329, "legacy_corr_mean_std_ratio": -0.2371316411248275},
+        {"year": 2026, "scored_dates": 33, "scored_identities": 233247, "mean_ncorr": 0.02641796774075387, "ncorr_std": 0.014017793959206475, "ncorr_mean_std_ratio": 1.8846023716451705, "positive_ncorr_date_percentage": 96.96969696969697, "median_weekly_ncorr": 0.02702538092323595, "worst_weekly_ncorr": -0.0031878226362648493, "best_weekly_ncorr": 0.05001115243423106, "p10_weekly_ncorr": 0.007637066848166212, "mean_legacy_corr": 0.021463555712750677, "legacy_corr_std": 0.013468262750481817, "legacy_corr_mean_std_ratio": 1.5936395146421414}
+      ],
+      "best_week": {"date": "2026-05-22", "ncorr": 0.05001115243423106},
+      "worst_week": {"date": "2025-11-14", "ncorr": -0.03514584733576332}
+    },
+    "ensemble": {
+      "per_year": [
+        {"year": 2025, "scored_dates": 19, "scored_identities": 132116, "mean_ncorr": -0.002327490066735314, "ncorr_std": 0.013679595530258364, "ncorr_mean_std_ratio": -0.17014319331204342, "positive_ncorr_date_percentage": 52.63157894736842, "median_weekly_ncorr": 0.0013362542899156228, "worst_weekly_ncorr": -0.03201642425893106, "best_weekly_ncorr": 0.021976228789765323, "p10_weekly_ncorr": -0.0179408408072535, "mean_legacy_corr": -0.0011808598764725213, "legacy_corr_std": 0.013465578286522327, "legacy_corr_mean_std_ratio": -0.08769470210235544},
+        {"year": 2026, "scored_dates": 33, "scored_identities": 233247, "mean_ncorr": 0.027231727724523754, "ncorr_std": 0.013464254060687363, "ncorr_mean_std_ratio": 2.0225203417718003, "positive_ncorr_date_percentage": 96.96969696969697, "median_weekly_ncorr": 0.02901231474436966, "worst_weekly_ncorr": -0.0030820152926932737, "best_weekly_ncorr": 0.05074103363989851, "p10_weekly_ncorr": 0.010512169614099539, "mean_legacy_corr": 0.021628531695745024, "legacy_corr_std": 0.01290492429834957, "legacy_corr_mean_std_ratio": 1.6759905905462094}
+      ],
+      "best_week": {"date": "2026-05-22", "ncorr": 0.05074103363989851},
+      "worst_week": {"date": "2025-11-14", "ncorr": -0.03201642425893106}
+    }
+  },
+  "research_oof_comparison": {
+    "research_experiment_id": "v6_medium_top250_rank_equal_001",
+    "research_scope": "Research Validation OOF model-selection evidence",
+    "final_scope": "Independent fixed-model final holdout evidence",
+    "research": {"scored_dates": 330, "scored_identities": 2180295, "mean_ncorr": 0.0281259671669812, "ncorr_std": 0.018208972007319746, "ncorr_mean_std_ratio": 1.5446213633408281, "positive_ncorr_date_percentage": 94.24242424242424, "worst_weekly_ncorr": -0.014090686460777394, "p10_weekly_ncorr": 0.004885384782276612, "mean_legacy_corr": 0.02353895232308195},
+    "final": {"scored_dates": 52, "scored_identities": 365363, "mean_ncorr": 0.01643124430079448, "ncorr_std": 0.019656310260214013, "ncorr_mean_std_ratio": 0.8359271950470109, "positive_ncorr_date_percentage": 80.76923076923077, "median_weekly_ncorr": 0.014882622256185656, "worst_weekly_ncorr": -0.03201642425893106, "best_weekly_ncorr": 0.05074103363989851, "p10_weekly_ncorr": -0.008533506279274287, "mean_legacy_corr": 0.013294330928973232, "legacy_corr_std": 0.0170732069993757, "legacy_corr_mean_std_ratio": 0.7786663003300641},
+    "absolute_difference_final_minus_research": {"mean_ncorr": -0.01169472286618672, "ncorr_std": 0.0014473382528942674, "ncorr_mean_std_ratio": -0.7086941682938173, "positive_ncorr_date_percentage": -13.473193473193462, "worst_weekly_ncorr": -0.017925737798153665, "p10_weekly_ncorr": -0.013418891061550899, "mean_legacy_corr": -0.010244621394108717},
+    "relative_mean_ncorr_difference": -0.4157980700452454,
+    "periods_are_not_exchangeable": true,
+    "automatic_pass_fail_threshold": null
+  },
+  "research_conclusions": {
+    "ensemble_highest_holdout_mean_ncorr_of_predeclared_candidates": true,
+    "medium_better_holdout_mean_std_and_downside_diagnostics": true,
+    "ensemble_incremental_mean_vs_medium_positive_but_weaker_than_research_oof": true,
+    "temporal_heterogeneity_observed": true,
+    "cause_resolved": false,
+    "statistical_significance_established": false,
+    "causal_claim_established": false,
+    "profitability_claim_established": false,
+    "historical_nmmc_available": false,
+    "historical_nbmc_available": false
+  },
+  "status": {
+    "evaluation": "evaluated",
+    "holdout": "no_longer_untouched",
+    "raw_targets_persisted": false,
+    "policy_changed": false,
+    "future_holdout_informed_research_phase": "new_development_phase"
+  }
+}

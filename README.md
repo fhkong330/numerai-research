@@ -397,7 +397,7 @@ Task 21C freezes `medium_top250_rank_equal_v1` in `docs/manifests/v6.0_v1_policy
 
 Ensemble A was selected because it has the strongest Research OOF mean NCORR (`0.028126`), improves over Medium and Top-250 by `+0.002005` and `+0.001799` on average, and adds little operational complexity beyond a second tree model. It is not uniformly better: it loses to Medium in Fold 1/2019 and to Top-250 in Fold 5 and 2024–partial-2025. Ensemble B's full-period mean is lower (`0.027951`) and its Ridge allocation helps mainly in 2024/Fold 4. These repeated-validation results are neither causal nor dependence-aware significance evidence and do not guarantee future generalization; historical NMMC and NBMC references remain unavailable.
 
-The independent final protocol remains unexecuted. Eligible training ends 2025-04-25, followed by the fixed 16-date gap (2025-05-02–2025-08-15) and the sealed 52-date/365,363-row holdout (2025-08-22–2026-08-14); 13 immature dates remain excluded. Task 22A must add a final-training IC mode through 2025-04-25, train two fresh fixed models, and persist component plus ensemble predictions before any holdout target is opened. The current IC audit ends 2024-08-30 and cannot supply that ranking. Holdout evaluation must report NCORR mean/std/ratio, positive rate, worst week, P10, Legacy CORR, component diagnostics, and identity integrity without tuning or arbitrary pass thresholds. A weak result must be reported, and any later holdout-informed work becomes a new development phase. The holdout remains sealed.
+The independent final protocol has now been executed once under evaluation ID `v6_v1_final_001`. Eligible training ended 2025-04-25, followed by the fixed 16-date gap and the fixed 52-date/365,363-row holdout from 2025-08-22 through 2026-08-14; 13 immature dates remained excluded. The holdout is evaluated and is no longer untouched. Any later research informed by these results belongs to a new development phase rather than independent validation.
 
 ### Sealed final-holdout infrastructure
 
@@ -410,15 +410,35 @@ Preparation and scoring use separate directories and states beneath `outputs/v6.
 .\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
 ```
 
-Task 22B enables only the preparation command; the scoring command remains deliberately disabled. Software checks provide auditable guardrails but cannot stop a person with direct filesystem access from bypassing them.
+Task 22C enabled the scoring command with both explicit authorization flags, committed-seal verification, a persisted scoring-start record, and a first target-access record. Software checks provide auditable guardrails but cannot stop a person with direct filesystem access from bypassing them.
 
 The preparation command was executed exactly once as `v6_v1_final_001`. It reused the completed `v6_medium_ic_001` observations through 2024-08-30 and calculated the 34 missing eligible weekly dates through 2025-04-25, producing 1,165 dates and 407,750 date-feature IC rows. The final Top-250 list overlaps Fold 5 on 240 features (Jaccard `0.9231`) and differs by 10 additions and 10 removals; this is descriptive and did not alter the frozen selection rule.
 
 Both fixed LightGBMs trained on the same 6,509,738 rows over 1,165 dates from 2003-01-03 through 2025-04-25. Medium-350 trained in 180.70 seconds and Top-250 in 131.06 seconds; both contain 300 trees and reload with zero prediction difference. Runtime before artifact persistence was 362.38 seconds; peak process memory was not measured reliably.
 
-The target-free output contains 365,363 aligned, unique, finite predictions over the 52 dates from 2025-08-22 through 2026-08-14 for each component and the fixed 50/50 rank ensemble. It records `target_columns_accessed: []`, retains policy SHA-256 `4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e`, and passes full hash verification. There is no scoring directory, NCORR, Legacy CORR, target summary, or final performance result. The holdout targets remain sealed.
+The target-free preparation contains 365,363 aligned, unique, finite predictions over the 52 dates for each component and the fixed 50/50 rank ensemble. It retains policy SHA-256 `4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e` and passes full hash verification. Task 22C subsequently accessed only canonical identities plus `target_jupiter_60` for those dates and did not persist raw targets.
 
 The version-controlled integrity record is `docs/manifests/v6.0_v1_final_001_preparation_seal.json`, SHA-256 `dbb1d968687125abd915be88e9b864c0c005e324e14f053f92d470c854b9a297`. It records the 11 immutable preparation hashes and prepared/unscored/sealed state; it is not a claim that deliberate filesystem bypass is impossible.
+
+### Independent final-holdout evaluation
+
+Task 22C executed the scoring command above exactly once. It reverified the policy and preparation seal, all 11 preparation hashes, the 300-column official neutralizer (`1ae870b1…c6c6f`), exact prediction identities, and the fixed 50/50 rank ensemble before opening the target projection. Scoring used `numerai-tools==0.7.2` official NCORR and separately labeled Legacy CORR; NMMC and NBMC were not approximated.
+
+| Candidate | Mean NCORR | NCORR std | Mean/std | Positive dates | Mean Legacy CORR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Medium LightGBM | 0.015918 | 0.016749 | 0.9504 | 82.69% | 0.013501 |
+| Final IC Top-250 LightGBM | 0.014903 | 0.020868 | 0.7142 | 73.08% | 0.012291 |
+| Frozen V1 50/50 ensemble | 0.016431 | 0.019656 | 0.8359 | 80.77% | 0.013294 |
+
+The ensemble exceeded Medium by a mean weekly `+0.000513` on 51.92% of dates and Top-250 by `+0.001528` on 57.69%. Performance was sharply period-dependent: the ensemble mean NCORR was `-0.002327` across 19 dates in partial 2025 and `0.027232` across 33 dates in partial 2026. Its best week was 2026-05-22 (`0.050741`) and worst was 2025-11-14 (`-0.032016`). Compared with the saved 330-date Research OOF mean of `0.028126`, final mean NCORR was lower by `0.011695` (41.58% relative), while the mean/std ratio fell from `1.5446` to `0.8359`. These different periods and sample sizes are not exchangeable, and no statistical-significance or pass/fail claim is made.
+
+Saved scoring reports live under `outputs/v6.0/final_holdout/v6_v1_final_001/scoring/`. Read them without target access or rescoring with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.final_holdout report --version v6.0 --evaluation-id v6_v1_final_001
+```
+
+The version-controlled final record is `docs/manifests/v6.0_v1_final_001_evaluation_record.json`. It preserves the verified policy, preparation-seal, completion-marker, and ten scoring-artifact hashes together with the exact saved aggregates and diagnostics, without embedding predictions or targets. Despite weaker holdout performance than Research OOF and Medium's better holdout mean/std and downside diagnostics, the ensemble retained the highest mean NCORR of the three predeclared candidates. The frozen V1 policy is therefore retained for initial live deployment without holdout-driven tuning. This is a deployment decision, not a new experiment or claim of statistical significance, causality, or profitability; subsequent holdout-informed research is a new development phase.
 
 The modeling pipeline separates reusable functionality into dedicated modules:
 

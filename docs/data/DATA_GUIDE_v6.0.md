@@ -593,6 +593,38 @@ Top-250 annual NCORR for 2019–2025 is `0.022518`, `0.013870`, `0.040988`, `0.0
 
 There are 212 features selected in all folds, 17 in only one fold, and 286 selected at least once. Pairwise Jaccard similarity ranges from `0.8182` to `0.8939`, reflecting gradual changes across expanding training cutoffs. This one predeclared comparison does not tune K or establish that standalone IC selection generalizes. Univariate IC can miss nonlinear, interaction, and conditional contribution, and repeated research validation creates selection bias. The sealed holdout remains outside selection and evaluation.
 
+## Fixed Ridge Baseline Contract
+
+Task 20A integrates one untuned Ridge baseline into the existing v6 pipeline. Its input is the ordered 350 numeric Medium features, target `target_jupiter_60`, and the unchanged five expanding folds with the 16-date purge. It uses no target-aware feature selection. The objective is normalized mean squared error plus `alpha * ||coefficients||²`, with fixed `alpha=0.001`; under an unnormalized sum-of-squares convention the equivalent penalty is `n_samples * 0.001`. The choice was declared before real Ridge training and is not based on OOF performance.
+
+Preprocessing is fitted separately within each fold. Non-missing training means provide imputation, and training population standard deviations provide scaling. Validation receives those parameters unchanged. Constant or near-constant training columns use scale 1 after centering; an entirely missing training column uses mean 0 and scale 1 and therefore receives a zero fitted coefficient. Only numeric finite-or-missing features are accepted, and exact feature order is enforced.
+
+The deterministic solver streams two passes in 20,000-row float32 batches. The first calculates training means and scales; the second accumulates float64 `XᵀX` and `Xᵀy`, adds `n_samples * alpha` to the coefficient diagonal, and solves the 350-dimensional system. It does not construct a full standardized matrix. The approximate peak Ridge-specific batch buffers are 28 MB float32 plus 56 MB float64, in addition to the compact fold DataFrames and ordinary scoring data. A bounded 1,024-row, 350-feature synthetic fit passed; this verifies batch behavior but not full-fold runtime or guaranteed machine feasibility.
+
+Ridge artifacts use `numerai_streaming_ridge_v1` JSON with the feature identity, preprocessing parameters, coefficients, intercept, objective parameters, training sample count, runtime, constant/all-missing counts, and maximum batch size. Existing LightGBM `.txt` artifacts retain their prior format. The Task 20B command was:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config ridge_baseline --experiment-id v6_medium_ridge_003 --run --confirm-full-run
+```
+
+Task 20B executed this command once as `v6_medium_ridge_003`. It completed in approximately 6 minutes 48 seconds. All five models contain the exact Medium order, alpha `0.001`, finite preprocessing and coefficients, expected fold sample counts, and 20,000-row maximum batches. Reloaded models reproduce all 2,180,295 saved predictions exactly. Canonical OOF identities match `v6_medium_baseline_001`; all 330 approved dates and fold assignments are present, with no duplicates, protected dates, or non-finite predictions.
+
+| Fold | Training rows | Training seconds | Coefficient norm | Ridge NCORR | Difference vs LightGBM |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 4,227,405 | 27.09 | 0.016052 | 0.012947 | -0.012967 |
+| 2 | 4,715,780 | 30.96 | 0.015363 | 0.019822 | -0.010285 |
+| 3 | 5,231,777 | 34.02 | 0.014383 | 0.017574 | -0.009883 |
+| 4 | 5,767,397 | 37.10 | 0.013703 | 0.024235 | +0.001761 |
+| 5 | 6,284,208 | 40.54 | 0.013355 | 0.008538 | -0.011235 |
+
+All folds have 350 nonzero coefficients, zero constant/near-constant features, and zero entirely missing features. Model JSON sizes are 38,424; 38,344; 38,320; 38,262; and 38,345 bytes. Nonzero coefficients reflect a jointly regularized linear fit and are not LightGBM-style Gain importance. A reliable process peak-memory sample was unavailable.
+
+Overall Ridge NCORR is `0.01809302`, standard deviation `0.01721479`, mean/std ratio `1.0510`, and positive-date percentage `85.76%`; Medium LightGBM records `0.02612141`, `0.01798110`, `1.4527`, and `93.33%`. Ridge Legacy CORR is `0.01578823` versus `0.02241025`. These are raw weekly research summaries; the ratio is not an annualized investment Sharpe.
+
+Ridge annual NCORR for 2019–2025 is `0.013576`, `0.004749`, `0.030541`, `0.022085`, `0.015917`, `0.024855`, and `0.007681`. Differences from LightGBM are `-0.016002`, `-0.010285`, `-0.008767`, `-0.004828`, `-0.018878`, `+0.011616`, and `-0.011124`; 2025 contains 17 dates. The paired weekly difference has mean `-0.00802839`, standard deviation `0.01744712`, median `-0.00913352`, and is positive on 34.24% of dates. Its ten largest absolute moves contribute 9.64% of total absolute movement.
+
+Ridge underperforms overall and is unstable across periods despite outperforming in Fold 4 and 2024. This does not establish statistical significance, causality, or useful ensemble complementarity. Its additive form may underfit nonlinear interactions; alpha remains untuned, and the sealed holdout remains outside evaluation.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

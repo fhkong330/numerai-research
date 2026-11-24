@@ -739,3 +739,53 @@ Top-250 fold NCORR is `0.02012810`, `0.03160391`, `0.02825315`, `0.02582942`, an
 There are 212 features shared by all five manifests, 17 selected in only one fold, and 286 selected at least once. Pairwise Jaccard similarity ranges `0.8182`–`0.8939`. Small membership is 65, 65, 66, 67, and 67 by fold; Medium-only membership is 185, 185, 184, 183, and 183. These changes reflect expanding-history IC ranks and are descriptive only.
 
 This was one fixed-K comparison, not a K search. The slight aggregate gain, lower positive-date percentage, Fold 1 loss, and later-period improvement warrant caution. No additional candidate, new IC audit, Gain-based selection, redundancy analysis, NMMC/NBMC proxy, or holdout evaluation was performed. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 20A: Fixed v6 Ridge Baseline Infrastructure
+
+### Predeclared model
+
+Added one Ridge configuration for the official 350 numeric Medium features using the existing v6 folds, purge, OOF identity, official NCORR, Legacy CORR, and artifact contracts. The objective is `mean squared error + alpha * L2 coefficient norm`, with fixed `alpha=0.001`. This normalized convention is invariant to fold row count and corresponds to unnormalized penalty `n_samples * 0.001`. The value represents modest shrinkage after standardization and was fixed without inspecting Ridge OOF performance. No hyperparameter search or target-aware selection was introduced.
+
+### Leakage-safe preprocessing and solver
+
+Every fold independently learns non-missing training means for imputation and population standard deviations for scaling. These parameters are frozen for that fold's Validation rows. Constant, near-constant, and all-missing training columns are handled without division by zero; categorical features, infinities, wrong feature order, null targets, and misaligned indexes are rejected. The closed-form solver is deterministic, so a random state is not operationally applicable.
+
+Training uses two bounded passes over 20,000-row float32 batches. Only the 350×350 Gram matrix, cross-product vector, and final linear solve use float64. This avoids a full standardized 6.28M×350 matrix; approximate per-batch feature buffers are 28 MB float32 plus 56 MB float64. A 1,024×350 synthetic fit verified the full Medium width and bounded batch contract. This does not prove full-fold runtime or guarantee 32 GB feasibility.
+
+### Pipeline, artifacts, and status
+
+The existing CLI now accepts `--model-config ridge_baseline`. Five fold models will be written as versioned JSON containing ordered feature names, means, scales, coefficients, intercept, alpha, batch configuration, sample count, and observed maximum batch size. Reloaded synthetic models produce identical predictions. LightGBM behavior and its text artifacts remain unchanged, including fold-specific Top-250 compatibility.
+
+The predeclared future command is:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config ridge_baseline --experiment-id v6_medium_ridge_003 --run --confirm-full-run
+```
+
+The command was not executed. There is no real Ridge NCORR, Legacy CORR, OOF prediction, or complementarity evidence. No Elastic Net, Lasso, feature selection, LightGBM rerun, scoring change, or holdout access occurred.
+
+---
+
+## 2026-11-23 — Task 20B: Real v6 Medium Ridge OOF Experiment
+
+### Execution and artifact integrity
+
+Executed exactly one fixed Ridge experiment, `v6_medium_ridge_003`, with the predeclared normalized alpha `0.001`, all 350 ordered Medium features, training-only imputation/scaling, the approved five folds, and 16-date purge. The exact documented command completed in approximately 6 minutes 48 seconds. The five JSON models reload successfully and reproduce all saved predictions exactly. The OOF artifact has 2,180,295 finite predictions over 330 approved dates, zero duplicate identities, correct fold assignments, canonical identity equality with `v6_medium_baseline_001`, and no gap, holdout, or immature rows.
+
+### Aggregate and paired results
+
+Ridge official NCORR has mean `0.0180930223`, weekly standard deviation `0.0172147902`, mean/std ratio `1.0510161392`, and positive-date percentage `85.7576%`. Medium LightGBM records `0.0261214141`, `0.0179810967`, `1.4527152902`, and `93.3333%`. Ridge mean Legacy CORR is `0.0157882346` versus `0.0224102507`.
+
+The paired Ridge-minus-LightGBM NCORR difference has mean `-0.0080283917`, standard deviation `0.0174471207`, median `-0.0091335188`, and is positive on 34.2424% of dates. Its 10th/90th percentiles are `-0.03031692` and `+0.01486321`; its largest decline/improvement are `-0.06445878` and `+0.03349593`. The ten largest absolute moves account for 9.64% of absolute movement. These weekly mean/std ratios are not annualized investment Sharpe ratios, and no dependence-aware significance test was performed.
+
+### Fold, annual, and training diagnostics
+
+Fold NCORR is `0.01294677`, `0.01982222`, `0.01757355`, `0.02423462`, and `0.00853773`; differences are `-0.01296676`, `-0.01028466`, `-0.00988324`, `+0.00176109`, and `-0.01123502`. Annual NCORR for 2019–2025 is `0.01357569`, `0.00474889`, `0.03054062`, `0.02208528`, `0.01591741`, `0.02485467`, and `0.00768142`; differences are `-0.01600185`, `-0.01028538`, `-0.00876671`, `-0.00482786`, `-0.01887794`, `+0.01161561`, and `-0.01112400`. Only Fold 4 and 2024 outperform Medium; no causal explanation is assigned.
+
+Training sample counts are 4,227,405; 4,715,780; 5,231,777; 5,767,397; and 6,284,208. Recorded model-fit times are 27.09, 30.96, 34.02, 37.10, and 40.54 seconds. Every fold uses at most 20,000 rows per batch, has 350 finite nonzero coefficients, zero constant/near-constant features, and zero entirely missing features. Coefficient norms are `0.016052`, `0.015363`, `0.014383`, `0.013703`, and `0.013355`; JSON files are approximately 37–38 KiB. A reliable process peak-memory reading was unavailable. Nonzero Ridge coefficients are not interpreted as LightGBM Gain importance.
+
+### Research interpretation
+
+The fixed Ridge baseline materially underperforms LightGBM overall, although its 2024 behavior differs. That isolated reversal does not prove complementarity, justify ensembling, or identify a cause. No alpha tuning, additional linear model, feature selection, LightGBM rerun, ensemble experiment, or holdout evaluation occurred. The final holdout remains sealed.

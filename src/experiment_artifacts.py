@@ -28,6 +28,7 @@ class V6ExperimentSpec:
     feature_selection_policy_id: str | None = None
     source_feature_quality_analysis_id: str | None = None
     fold_feature_manifests: tuple[dict, ...] | None = None
+    model_artifact_extension: str = "txt"
 
 
 def current_git_state(project_root: Path | None = None) -> dict:
@@ -148,6 +149,7 @@ def save_v6_experiment_artifacts(
         "model_parameters": spec.model_parameters,
         "random_seed": spec.random_seed,
         "run_kind": spec.run_kind,
+        "model_artifact_format": spec.model_artifact_extension,
         "validation_method": "expanding_walk_forward",
         "purge_dates": config.purge_dates,
         "folds": fold_summaries,
@@ -206,7 +208,12 @@ def save_v6_experiment_artifacts(
             for fold_id, source in sorted(model_files.items()):
                 if not source.is_file():
                     raise FileNotFoundError(f"Fold model file not found: {source}")
-                shutil.copy2(source, models_dir / f"fold_{fold_id}.txt")
+                if source.suffix.lstrip(".") != spec.model_artifact_extension:
+                    raise ValueError("Fold model artifact extension does not match metadata.")
+                shutil.copy2(
+                    source,
+                    models_dir / f"fold_{fold_id}.{spec.model_artifact_extension}",
+                )
             metadata["artifacts"]["models"] = "models/"
         if feature_manifests is not None:
             manifests_dir = experiment_dir / "feature_manifests"

@@ -115,3 +115,14 @@ DEFAULT_LIGHTGBM_PARAMS = {
     "random_state": RANDOM_STATE,
     "n_jobs": -1,
 }
+
+# Fixed v6 Ridge baseline. The objective is
+# mean((y - intercept - X_standardized @ coef) ** 2) + alpha * ||coef||_2 ** 2.
+# This normalized convention makes regularization independent of fold row count;
+# it is equivalent to sklearn's unnormalized Ridge alpha = n_samples * alpha.
+DEFAULT_RIDGE_PARAMS = {
+    "alpha": 0.001,
+    "batch_size": 20_000,
+    "near_constant_threshold": 1e-6,
+    "solver": "batched_sufficient_statistics",
+}

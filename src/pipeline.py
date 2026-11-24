@@ -39,8 +39,11 @@ from src.feature_selection import (
 )
 from src.models import (
     create_lightgbm_model,
+    predict_streaming_ridge,
     predict_validated_lightgbm,
+    save_streaming_ridge,
     train_model,
+    train_streaming_ridge,
     train_validated_lightgbm,
     predict_model,
 )
@@ -54,6 +57,7 @@ from src.validation import (
 
 from src.config import (
     DEFAULT_LIGHTGBM_PARAMS,
+    DEFAULT_RIDGE_PARAMS,
     MODEL_NAME,
     PURGE_ERAS,
     RANDOM_STATE,
@@ -352,10 +356,19 @@ def execute_v6_walk_forward(
     output_root: Path = OUTPUT_ROOT,
     run_kind: str = "research",
     fold_feature_manifests: dict[int, FoldFeatureManifest] | None = None,
+    model_config_name: str = "baseline",
 ) -> Path:
     """Run the v6 fold loop from protected frames and save completed artifacts."""
     config = get_research_config("v6.0")
-    params = DEFAULT_LIGHTGBM_PARAMS.copy()
+    if model_config_name not in {"baseline", "ridge_baseline"}:
+        raise ValueError(f"Unsupported model configuration: {model_config_name}")
+    if model_config_name == "ridge_baseline" and fold_feature_manifests is not None:
+        raise ValueError("The fixed Ridge baseline does not use feature selection.")
+    params = (
+        DEFAULT_RIDGE_PARAMS.copy()
+        if model_config_name == "ridge_baseline"
+        else DEFAULT_LIGHTGBM_PARAMS.copy()
+    )
     if model_params:
         params.update(model_params)
     if fold_feature_manifests is not None:
@@ -386,11 +399,20 @@ def execute_v6_walk_forward(
                 fold_features,
                 fold,
             )
-            model = create_lightgbm_model(params)
-            model = train_validated_lightgbm(
-                model, train_data.features, train_data.target, fold_features
-            )
-            predictions = predict_validated_lightgbm(model, valid_data.features)
+            if model_config_name == "ridge_baseline":
+                model = train_streaming_ridge(
+                    train_data.features,
+                    train_data.target,
+                    fold_features,
+                    params,
+                )
+                predictions = predict_streaming_ridge(model, valid_data.features)
+            else:
+                model = create_lightgbm_model(params)
+                model = train_validated_lightgbm(
+                    model, train_data.features, train_data.target, fold_features
+                )
+                predictions = predict_validated_lightgbm(model, valid_data.features)
             fold_ids = pd.Series(
                 fold.fold,
                 index=valid_data.identity.index,
@@ -405,8 +427,12 @@ def execute_v6_walk_forward(
                     valid_data.target,
                 )
             )
-            model_path = Path(temp_dir) / f"fold_{fold.fold}.txt"
-            model.booster_.save_model(str(model_path))
+            extension = "json" if model_config_name == "ridge_baseline" else "txt"
+            model_path = Path(temp_dir) / f"fold_{fold.fold}.{extension}"
+            if model_config_name == "ridge_baseline":
+                save_streaming_ridge(model, model_path)
+            else:
+                model.booster_.save_model(str(model_path))
             model_files[fold.fold] = model_path
             del train_data, valid_data, model, predictions, fold_ids
             gc.collect()
@@ -437,7 +463,7 @@ def execute_v6_walk_forward(
             experiment_id=experiment_id,
             feature_set_name=feature_set_name,
             feature_names=features,
-            model_family=MODEL_NAME,
+            model_family=("Ridge" if model_config_name == "ridge_baseline" else MODEL_NAME),
             model_parameters=params,
             random_seed=RANDOM_STATE,
             run_kind=run_kind,
@@ -455,6 +481,9 @@ def execute_v6_walk_forward(
                 )
                 if fold_feature_manifests is not None
                 else None
+            ),
+            model_artifact_extension=(
+                "json" if model_config_name == "ridge_baseline" else "txt"
             ),
         )
         return save_v6_experiment_artifacts(
@@ -476,10 +505,16 @@ def run_v6_walk_forward_pipeline(
     output_root: Path = OUTPUT_ROOT,
     selection_policy_id: str | None = None,
     feature_quality_analysis_id: str | None = None,
+    model_config_name: str = "baseline",
 ) -> Path:
     get_research_config("v6.0")
     data_dir = data_dir or resolve_data_dir("v6.0")
     features = resolve_v6_numeric_feature_set(feature_set_name, data_dir)
+    if model_config_name == "ridge_baseline":
+        if feature_set_name != "medium":
+            raise ValueError("The fixed Ridge baseline requires Medium features.")
+        if selection_policy_id or feature_quality_analysis_id:
+            raise ValueError("The fixed Ridge baseline does not use feature selection.")
     historical = load_v6_historical_training_data(features, data_dir)
     research = load_v6_research_validation_data(features, data_dir)
     historical_dates, research_dates = load_v6_fold_dates(data_dir)
@@ -515,6 +550,7 @@ def run_v6_walk_forward_pipeline(
         data_dir / "validation_neutralizer.parquet",
         output_root=output_root,
         fold_feature_manifests=fold_feature_manifests,
+        model_config_name=model_config_name,
     )
 
 
@@ -585,7 +621,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Numerai research pipeline.")
     parser.add_argument("--version", required=True)
     parser.add_argument("--feature-set", default="medium")
-    parser.add_argument("--model-config", choices=["baseline"], default="baseline")
+    parser.add_argument(
+        "--model-config", choices=["baseline", "ridge_baseline"], default="baseline"
+    )
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--selection-policy", choices=[POLICY_ID])
     parser.add_argument("--feature-quality-id")
@@ -607,6 +645,8 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit("Synthetic smoke mode supports --feature-set medium only.")
         if args.selection_policy or args.feature_quality_id:
             raise SystemExit("Synthetic smoke mode does not use real feature selection.")
+        if args.model_config != "baseline":
+            raise SystemExit("Synthetic CLI smoke mode supports the baseline model only.")
         path = run_v6_smoke_pipeline(args.experiment_id)
     else:
         if not args.confirm_full_run:
@@ -614,9 +654,14 @@ def main(argv: list[str] | None = None) -> None:
         path = run_v6_walk_forward_pipeline(
             args.experiment_id,
             args.feature_set,
-            DEFAULT_LIGHTGBM_PARAMS,
+            (
+                DEFAULT_RIDGE_PARAMS
+                if args.model_config == "ridge_baseline"
+                else DEFAULT_LIGHTGBM_PARAMS
+            ),
             selection_policy_id=args.selection_policy,
             feature_quality_analysis_id=args.feature_quality_id,
+            model_config_name=args.model_config,
         )
     print(path)
 

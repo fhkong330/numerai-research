@@ -311,6 +311,43 @@ The paired Top-250-minus-Medium mean is `0.00020542` with standard deviation `0.
 
 Across manifests, 212 features appear in all five folds, 17 appear in only one, and 286 appear at least once. Pairwise Jaccard similarity ranges `0.8182`–`0.8939`. Small membership rises from 65 features in Folds 1–2 to 66 in Fold 3 and 67 in Folds 4–5; the remainder are Medium-only. IC is a standalone monotonic-association diagnostic, so the policy may remove conditionally useful or interacting features. The sealed holdout remains untouched.
 
+### Fixed Ridge baseline infrastructure
+
+Task 20A adds a Ridge option to the same v6 fold, scoring, and artifact pipeline. The predeclared model uses all 350 official numeric Medium features and minimizes:
+
+```text
+mean((y - intercept - X_standardized @ coefficients) ** 2)
+    + 0.001 * sum(coefficients ** 2)
+```
+
+The normalized `alpha=0.001` convention is independent of fold sample count and is equivalent to an unnormalized scikit-learn-style penalty of `n_samples * 0.001`. It was chosen as modest shrinkage for standardized features before observing any Ridge OOF result. The closed-form sufficient-statistics solver is deterministic, so no stochastic random state is consumed.
+
+For every fold, training-only non-missing means impute missing numeric values and training-only population standard deviations scale features. Constant, near-constant (scale at most `1e-6`), and entirely missing training columns receive scale 1; their centered training values are zero. Categorical columns, infinities, feature-order changes, null targets, and target-index misalignment are rejected.
+
+The implementation makes two 20,000-row passes, retaining float32 feature batches and only a float64 350×350 Gram matrix, cross-product vector, and solve. A batch requires roughly 28 MB as float32 and 56 MB for its temporary float64 sufficient-statistics view, rather than an approximately 8.8 GB full standardized Fold 5 matrix. Each fold is released before the next. A bounded 1,024×350 synthetic fit verifies width and batch limits, but does not establish full-fold runtime or guaranteed 32 GB headroom.
+
+Each fold model is saved as `models/fold_<n>.json` using `numerai_streaming_ridge_v1`, including ordered features, imputation means, scales, coefficients, intercept, alpha, batch settings, sample count, training runtime, constant/all-missing counts, and observed maximum batch size. Reloaded models reproduce predictions exactly.
+
+The real experiment command was:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config ridge_baseline --experiment-id v6_medium_ridge_003 --run --confirm-full-run
+```
+
+Task 20B executed this command exactly once. `v6_medium_ridge_003` completed in approximately 6 minutes 48 seconds and produced five reloadable fold models, 330 OOF dates, and 2,180,295 rows with canonical identities matching LightGBM Medium. No duplicate, gap, holdout, immature, or non-finite prediction exists.
+
+| OOF metric | Ridge Medium | LightGBM Medium |
+|---|---:|---:|
+| Mean NCORR | 0.018093 | 0.026121 |
+| NCORR standard deviation | 0.017215 | 0.017981 |
+| NCORR mean/std ratio | 1.0510 | 1.4527 |
+| Positive NCORR dates | 85.76% | 93.33% |
+| Mean Legacy CORR | 0.015788 | 0.022410 |
+
+The paired Ridge-minus-LightGBM NCORR mean is `-0.00802839` with standard deviation `0.01744712`; Ridge wins 34.24% of dates. It underperforms in four folds and every year except 2024. Fold 4 is `+0.00176109`, and 2024 is `+0.01161561`; partial 2025 falls by `-0.01112400`. The top ten absolute weekly differences account for 9.64% of total absolute movement. These raw weekly mean/std ratios are research stability summaries, not annualized investment Sharpe ratios, and no dependence-aware significance test or ensemble experiment was performed.
+
+Fold training times are 27.1, 31.0, 34.0, 37.1, and 40.5 seconds for 4.23–6.28 million rows. Every fold uses a 20,000-row maximum batch, has 350 finite nonzero coefficients, no constant/all-missing feature, and a 37–38 KiB JSON model. Coefficient norms decline from `0.016052` to `0.013355`. Nonzero linear coefficients are not comparable to LightGBM Gain importance. Reliable process peak memory was unavailable; only the bounded buffer design is documented. The sealed holdout remains untouched.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

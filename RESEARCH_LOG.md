@@ -689,3 +689,53 @@ The divergence is descriptive and plausible because IC measures standalone monot
 ### Status
 
 Saved the non-overwriting analysis as `v6_medium_importance_001`, including raw fold importance, cross-fold summaries, group summaries, exact fold-specific IC joins, rank correlations, relationship summaries, metadata, and a completion marker. No model was trained, no prediction or NCORR was recomputed, no validation or holdout target was accessed, and no redundancy, permutation, ablation, or selection analysis was performed.
+
+---
+
+## 2026-11-23 — Task 19E: Fold-Specific Top-250 IC Selection Implementation
+
+### Predeclared policy
+
+Implemented the single policy `medium_top250_abs_mean_ic_v1`. Within each approved fold, the selector ranks the official 350 Medium numeric features by descending absolute mean Spearman IC computed over that fold's exact training dates, requires valid IC observations, resolves ties by feature name, selects exactly 250, and restores official Medium order for LightGBM input. Negative IC is therefore eligible by magnitude; no sign flip or feature transformation is applied.
+
+`K=250` was fixed before a candidate run as one bounded reduction of 100 features from Medium. It was not tuned, and no alternative K or policy was implemented. Gain/split importance and Validation targets are not inputs because the question is specifically whether a predeclared fold-as-of standalone-IC screen can improve the existing Medium baseline.
+
+### Leakage and artifact safeguards
+
+The selector validates `v6.0`, `target_jupiter_60`, the exact ordered Medium universe, all five approved fold identities, each fold's full training-date list and cutoff, and the source analysis identity. It rejects mixed or later-fold summaries, unexpected cutoffs, incomplete feature identities, undefined selections, and inconsistent artifacts. Consequently same-fold Validation, purge, pre-holdout gap, final holdout, and immature dates cannot enter a fold's ranking.
+
+The pipeline now accepts a fold-specific feature manifest while retaining the prior global feature path when selection is disabled. A selected run records one deterministic JSON manifest per fold with its policy, source IC analysis, cutoff, ranks and IC statistics, official-order model features, hashes, model configuration, seed, and Git state. Existing baseline artifacts remain readable and unchanged.
+
+### Future experiment and status
+
+The predeclared future command is:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --selection-policy medium_top250_abs_mean_ic_v1 --feature-quality-id v6_medium_ic_001 --experiment-id v6_medium_top250_ic_002 --run --confirm-full-run
+```
+
+This command was not executed in Task 19E. No real model was trained, no prediction or NCORR was calculated, and no performance conclusion exists. The policy remains limited by univariate monotonic association and may discard features whose value is conditional, nonlinear, or interaction-dependent. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 19F: Real Fold-Specific Top-250 IC Experiment
+
+### Execution and integrity
+
+Executed exactly one predeclared candidate, `v6_medium_top250_ic_002`, with `medium_top250_abs_mean_ic_v1`, baseline LightGBM parameters, `target_jupiter_60`, the approved five expanding folds, and the 16-date purge. The documented command completed in approximately 14 minutes 30 seconds. The artifact contains five readable models, five fold-specific manifests sourced from `v6_medium_ic_001`, 2,180,295 OOF rows, and 330 dates. Canonically sorted row identities match `v6_medium_baseline_001` exactly; there are no duplicates or gap, holdout, or immature dates.
+
+### Aggregate and paired comparison
+
+Mean official NCORR is `0.0263268391`, standard deviation `0.0177141064`, Sharpe-like `1.4862075749`, and positive-date percentage `91.8182%`. Medium records `0.0261214141`, `0.0179810967`, `1.4527152902`, and `93.3333%`. Mean Legacy CORR is `0.0225756881` versus `0.0224102507`.
+
+The paired Top-250-minus-Medium NCORR difference has mean `0.0002054250`, standard deviation `0.0116841383`, median `0.0001086914`, and is positive on 50.6061% of dates. Its 10th/90th percentiles are `-0.01418857` and `+0.01405334`; the largest decline/improvement are `-0.04185361` and `+0.02738511`. The ten largest absolute differences account for 10.05% of total absolute movement. The small mean is not a statistical-significance claim, and weekly dependence has not been modeled.
+
+### Temporal results
+
+Top-250 fold NCORR is `0.02012810`, `0.03160391`, `0.02825315`, `0.02582942`, and `0.02412886`; the corresponding Medium differences are `-0.00578544`, `+0.00149703`, `+0.00079637`, `+0.00335589`, and `+0.00435610`. Top-250 annual NCORR for 2019 through 2025 is `0.02251776`, `0.01386994`, `0.04098789`, `0.02656071`, `0.03547918`, `0.01946007`, and `0.02266710`; differences are `-0.00705978`, `-0.00116433`, `+0.00168056`, `-0.00035242`, `+0.00068384`, `+0.00622100`, and `+0.00386168`. Partial 2025 contains 17 dates. The candidate's aggregate improvement is temporally heterogeneous, with early underperformance and stronger 2024–2025 results. No causal explanation is established.
+
+### Feature-list stability and decision status
+
+There are 212 features shared by all five manifests, 17 selected in only one fold, and 286 selected at least once. Pairwise Jaccard similarity ranges `0.8182`–`0.8939`. Small membership is 65, 65, 66, 67, and 67 by fold; Medium-only membership is 185, 185, 184, 183, and 183. These changes reflect expanding-history IC ranks and are descriptive only.
+
+This was one fixed-K comparison, not a K search. The slight aggregate gain, lower positive-date percentage, Fold 1 loss, and later-period improvement warrant caution. No additional candidate, new IC audit, Gain-based selection, redundancy analysis, NMMC/NBMC proxy, or holdout evaluation was performed. The final holdout remains sealed.

@@ -31,6 +31,12 @@ from src.evaluation import (
     validate_v6_oof_predictions,
 )
 from src.experiment_artifacts import V6ExperimentSpec, save_v6_experiment_artifacts
+from src.feature_quality import load_feature_quality_artifacts
+from src.feature_selection import (
+    POLICY_ID,
+    FoldFeatureManifest,
+    build_top250_fold_manifests,
+)
 from src.models import (
     create_lightgbm_model,
     predict_validated_lightgbm,
@@ -345,26 +351,44 @@ def execute_v6_walk_forward(
     expected_neutralizer_count: int = 300,
     output_root: Path = OUTPUT_ROOT,
     run_kind: str = "research",
+    fold_feature_manifests: dict[int, FoldFeatureManifest] | None = None,
 ) -> Path:
     """Run the v6 fold loop from protected frames and save completed artifacts."""
     config = get_research_config("v6.0")
     params = DEFAULT_LIGHTGBM_PARAMS.copy()
     if model_params:
         params.update(model_params)
+    if fold_feature_manifests is not None:
+        expected_fold_ids = {fold.fold for fold in folds}
+        if set(fold_feature_manifests) != expected_fold_ids:
+            raise ValueError("Expected one feature-selection manifest per fold.")
+        for fold in folds:
+            manifest = fold_feature_manifests[fold.fold]
+            if (
+                manifest.policy_id != POLICY_ID
+                or manifest.fold_id != fold.fold
+                or manifest.train_end != fold.train_dates[-1]
+            ):
+                raise ValueError("Fold feature-selection manifest is inconsistent.")
     oof_parts = []
 
     with tempfile.TemporaryDirectory(prefix="numerai-v6-models-") as temp_dir:
         model_files = {}
         for fold in folds:
+            fold_features = (
+                list(fold_feature_manifests[fold.fold].model_feature_names)
+                if fold_feature_manifests is not None
+                else features
+            )
             train_data, valid_data = prepare_v6_fold_model_data(
                 historical_training,
                 research_validation,
-                features,
+                fold_features,
                 fold,
             )
             model = create_lightgbm_model(params)
             model = train_validated_lightgbm(
-                model, train_data.features, train_data.target, features
+                model, train_data.features, train_data.target, fold_features
             )
             predictions = predict_validated_lightgbm(model, valid_data.features)
             fold_ids = pd.Series(
@@ -417,6 +441,21 @@ def execute_v6_walk_forward(
             model_parameters=params,
             random_seed=RANDOM_STATE,
             run_kind=run_kind,
+            feature_selection_policy_id=(
+                POLICY_ID if fold_feature_manifests is not None else None
+            ),
+            source_feature_quality_analysis_id=(
+                next(iter(fold_feature_manifests.values())).source_ic_analysis_id
+                if fold_feature_manifests is not None
+                else None
+            ),
+            fold_feature_manifests=(
+                tuple(
+                    fold_feature_manifests[fold.fold].to_dict() for fold in folds
+                )
+                if fold_feature_manifests is not None
+                else None
+            ),
         )
         return save_v6_experiment_artifacts(
             spec,
@@ -435,6 +474,8 @@ def run_v6_walk_forward_pipeline(
     model_params: dict | None = None,
     data_dir: Path | None = None,
     output_root: Path = OUTPUT_ROOT,
+    selection_policy_id: str | None = None,
+    feature_quality_analysis_id: str | None = None,
 ) -> Path:
     get_research_config("v6.0")
     data_dir = data_dir or resolve_data_dir("v6.0")
@@ -443,6 +484,26 @@ def run_v6_walk_forward_pipeline(
     research = load_v6_research_validation_data(features, data_dir)
     historical_dates, research_dates = load_v6_fold_dates(data_dir)
     folds = generate_v6_walk_forward_folds(historical_dates, research_dates)
+    fold_feature_manifests = None
+    if selection_policy_id is not None:
+        if selection_policy_id != POLICY_ID:
+            raise ValueError(f"Unsupported feature-selection policy: {selection_policy_id}")
+        if feature_set_name != "medium" or not feature_quality_analysis_id:
+            raise ValueError(
+                "Top-250 selection requires Medium and a feature-quality analysis ID."
+            )
+        quality = load_feature_quality_artifacts(
+            output_root
+            / "v6.0"
+            / "feature_quality"
+            / feature_quality_analysis_id
+        )
+        fold_feature_manifests = build_top250_fold_manifests(
+            quality["fold_summaries"],
+            quality["metadata"],
+            features,
+            folds,
+        )
     return execute_v6_walk_forward(
         historical,
         research,
@@ -453,6 +514,7 @@ def run_v6_walk_forward_pipeline(
         model_params,
         data_dir / "validation_neutralizer.parquet",
         output_root=output_root,
+        fold_feature_manifests=fold_feature_manifests,
     )
 
 
@@ -525,6 +587,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--feature-set", default="medium")
     parser.add_argument("--model-config", choices=["baseline"], default="baseline")
     parser.add_argument("--experiment-id", required=True)
+    parser.add_argument("--selection-policy", choices=[POLICY_ID])
+    parser.add_argument("--feature-quality-id")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--smoke", action="store_true")
     mode.add_argument("--run", action="store_true")
@@ -532,11 +596,17 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.version != "v6.0":
         raise SystemExit("The new pipeline CLI currently supports only --version v6.0.")
+    if bool(args.selection_policy) != bool(args.feature_quality_id):
+        raise SystemExit(
+            "Feature selection requires both --selection-policy and --feature-quality-id."
+        )
     if args.smoke:
         if args.confirm_full_run:
             raise SystemExit("--confirm-full-run is invalid with --smoke.")
         if args.feature_set != "medium":
             raise SystemExit("Synthetic smoke mode supports --feature-set medium only.")
+        if args.selection_policy or args.feature_quality_id:
+            raise SystemExit("Synthetic smoke mode does not use real feature selection.")
         path = run_v6_smoke_pipeline(args.experiment_id)
     else:
         if not args.confirm_full_run:
@@ -545,6 +615,8 @@ def main(argv: list[str] | None = None) -> None:
             args.experiment_id,
             args.feature_set,
             DEFAULT_LIGHTGBM_PARAMS,
+            selection_policy_id=args.selection_policy,
+            feature_quality_analysis_id=args.feature_quality_id,
         )
     print(path)
 

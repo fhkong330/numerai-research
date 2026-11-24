@@ -101,26 +101,42 @@ def compare_loaded_v6_experiments(baseline: dict, candidate: dict) -> dict:
         return rows
 
     differences = paired["ncorr_difference"]
+
+    def feature_count(metadata: dict) -> int:
+        selection = metadata.get("feature_selection")
+        return (
+            int(selection["selected_feature_count_per_fold"])
+            if selection
+            else len(metadata["ordered_feature_names"])
+        )
     return {
         "baseline": {
             "experiment_id": baseline_meta["experiment_id"],
             "feature_set": baseline_meta["feature_set"],
-            "feature_count": len(baseline_meta["ordered_feature_names"]),
+            "feature_count": feature_count(baseline_meta),
             "metrics": baseline["metrics"],
         },
         "candidate": {
             "experiment_id": candidate_meta["experiment_id"],
             "feature_set": candidate_meta["feature_set"],
-            "feature_count": len(candidate_meta["ordered_feature_names"]),
+            "feature_count": feature_count(candidate_meta),
             "metrics": candidate["metrics"],
         },
         "paired_ncorr": {
             "date_count": int(len(paired)),
             "mean_difference": float(differences.mean()),
             "std_difference": float(differences.std()),
+            "median_difference": float(differences.median()),
+            "p10_difference": float(differences.quantile(0.10)),
+            "p90_difference": float(differences.quantile(0.90)),
             "candidate_outperformance_percentage": float(
                 (differences > 0).mean() * 100
             ),
+            "top_10_absolute_difference_share": float(
+                differences.abs().nlargest(10).sum() / differences.abs().sum()
+            ),
+            "largest_improvement": float(differences.max()),
+            "largest_decline": float(differences.min()),
         },
         "per_fold": grouped("fold_id"),
         "per_year": grouped("year"),

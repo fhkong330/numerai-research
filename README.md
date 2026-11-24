@@ -285,6 +285,32 @@ All 350 features were used in at least one fold. The strongest mean normalized-g
 
 Small captured 32.11%–34.16% of total fold gain with 100 features, while the 250 Medium-only features captured 65.84%–67.89%. Average gain per feature was higher for Small (`0.003337`) than Medium-only (`0.002665`), and Small importance was more concentrated in its top ten features. Fold-specific absolute IC versus gain correlations were positive but weak (`0.2310`–`0.2709`), confirming that standalone association and conditional model usage are distinct diagnostics. These results are not causal, do not measure incremental value, and define no selection policy.
 
+### Fold-specific Top-250 IC policy
+
+Task 19E implements one predeclared candidate policy, `medium_top250_abs_mean_ic_v1`, without running it on a real model. For each approved fold it ranks the official 350 numeric Medium features by descending absolute mean Spearman IC calculated only over that fold's exact training dates. It requires valid IC observations, sends missing or undefined values to the end, resolves ties by feature name, selects exactly 250, and then restores official Medium order for the model matrix. It never uses gain importance, same-fold Validation targets, later-fold summaries, the pre-holdout gap, or holdout targets.
+
+`K=250` is fixed in advance as one bounded reduction of 100 features from Medium, not a value selected by comparing candidate results. Each future experiment stores a per-fold manifest with the policy and source-analysis identities, approved cutoff, selection ranks and IC statistics, ordered model features, integrity hashes, configuration, and code state. Existing Small and Medium experiments continue to use their original global feature lists.
+
+The real candidate command was:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --selection-policy medium_top250_abs_mean_ic_v1 --feature-quality-id v6_medium_ic_001 --experiment-id v6_medium_top250_ic_002 --run --confirm-full-run
+```
+
+Task 19F executed this command exactly once as `v6_medium_top250_ic_002`, completing in approximately 14 minutes 30 seconds. Its 2,180,295 OOF rows and 330 dates have the same canonical identities as `v6_medium_baseline_001`, with no duplicate, gap, holdout, or immature identity.
+
+| OOF metric | Medium 350 | Fold Top-250 |
+|---|---:|---:|
+| Mean NCORR | 0.026121 | 0.026327 |
+| NCORR standard deviation | 0.017981 | 0.017714 |
+| NCORR Sharpe-like | 1.4527 | 1.4862 |
+| Positive NCORR dates | 93.33% | 91.82% |
+| Mean Legacy CORR | 0.022410 | 0.022576 |
+
+The paired Top-250-minus-Medium mean is `0.00020542` with standard deviation `0.01168414`; Top-250 wins 50.61% of dates. Fold 1 declines by `-0.00578544`, while Folds 2–5 improve by `0.00149703`, `0.00079637`, `0.00335589`, and `0.00435610`. The strongest annual differences are later: 2024 is `+0.00622100` and partial 2025 is `+0.00386168`; 2019 is `-0.00705978`. The top ten absolute paired moves account for 10.05% of total absolute movement, so the result is not explained by only a few dates, but its small mean and temporal heterogeneity do not establish statistical significance.
+
+Across manifests, 212 features appear in all five folds, 17 appear in only one, and 286 appear at least once. Pairwise Jaccard similarity ranges `0.8182`–`0.8939`. Small membership rises from 65 features in Folds 1–2 to 66 in Fold 3 and 67 in Folds 4–5; the remainder are Medium-only. IC is a standalone monotonic-association diagnostic, so the policy may remove conditionally useful or interacting features. The sealed holdout remains untouched.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

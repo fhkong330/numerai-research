@@ -557,6 +557,42 @@ Each fold's importance is joined only to IC calculated through that model's trai
 
 Gain and split importance are model-dependent usage diagnostics. They are biased by tree construction and correlated alternatives and do not establish causality, standalone alpha, or incremental contribution. No validation target, holdout target, NCORR, permutation, redundancy, ablation, or selection rule was used.
 
+## Fold-Specific Top-250 IC Selection Contract
+
+Task 19E adds the single policy `medium_top250_abs_mean_ic_v1`. Its universe is the ordered 350 numeric features in the official Medium set. Independently for each approved research fold, it ranks features by descending absolute training-history mean Spearman IC from `v6_medium_ic_001`, breaks ties by feature name, places missing or undefined statistics last, and requires at least 250 features with valid observations. It selects exactly 250 and restores official Medium order before model input.
+
+The selector verifies the dataset (`v6.0`), target (`target_jupiter_60`), complete Medium feature identity, approved fold identity, exact training-date list, and training cutoff. A fold can consume only its own as-of summary; later-fold rows, Validation-derived rankings, gap/holdout dates, mixed folds, incomplete feature sets, and inconsistent metadata are rejected. Gain and split importance are not selection inputs.
+
+Each selected experiment will persist `feature_manifests/fold_<n>.json`. A manifest records:
+
+- policy ID, fixed `K=250`, fold number, approved train start/end, and source IC analysis ID;
+- source-universe identity and hashes of the ranked and model-ordered feature lists;
+- selection rank, feature name, signed mean IC, absolute mean IC, and valid-date count;
+- the 250 features in official model-input order;
+- model configuration, random seed, repository configuration, and Git state.
+
+`K=250` was predeclared as one bounded 100-feature reduction from Medium. It was not optimized against OOF results, and the implementation does not compare other values or policies. The Task 19F command was:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.pipeline --version v6.0 --feature-set medium --model-config baseline --selection-policy medium_top250_abs_mean_ic_v1 --feature-quality-id v6_medium_ic_001 --experiment-id v6_medium_top250_ic_002 --run --confirm-full-run
+```
+
+Task 19F executed this command exactly once. `v6_medium_top250_ic_002` contains five fold models, five manifests, 2,180,295 OOF rows, and all 330 approved dates. Canonically sorted OOF identities match the Medium baseline exactly; physical Parquet row order differs. There are no duplicate identities or dates from the pre-holdout gap, sealed holdout, or immature partition. The observed wall time was approximately 14 minutes 30 seconds.
+
+| Fold | Train cutoff | Small | Medium-only | Top-250 NCORR | Medium NCORR | Difference |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 | 2018-09-07 | 65 | 185 | 0.020128 | 0.025914 | -0.005785 |
+| 2 | 2020-03-06 | 65 | 185 | 0.031604 | 0.030107 | +0.001497 |
+| 3 | 2021-09-03 | 66 | 184 | 0.028253 | 0.027457 | +0.000796 |
+| 4 | 2023-03-03 | 67 | 183 | 0.025829 | 0.022474 | +0.003356 |
+| 5 | 2024-08-30 | 67 | 183 | 0.024129 | 0.019773 | +0.004356 |
+
+Overall mean NCORR is `0.02632684` versus `0.02612141`; NCORR standard deviation is `0.01771411` versus `0.01798110`; Sharpe-like is `1.4862` versus `1.4527`; positive-date percentage is `91.82%` versus `93.33%`. Mean Legacy CORR is `0.02257569` versus `0.02241025`. The paired NCORR difference has mean `0.00020542`, standard deviation `0.01168414`, median `0.00010869`, and 50.61% positive dates.
+
+Top-250 annual NCORR for 2019–2025 is `0.022518`, `0.013870`, `0.040988`, `0.026561`, `0.035479`, `0.019460`, and `0.022667`. The corresponding differences are `-0.007060`, `-0.001164`, `+0.001681`, `-0.000352`, `+0.000684`, `+0.006221`, and `+0.003862`; 2025 contains 17 dates. The ten largest absolute paired moves contribute 10.05% of total absolute movement. This indicates broad temporal variation rather than a result driven solely by a few dates, but is not a dependence-aware significance test.
+
+There are 212 features selected in all folds, 17 in only one fold, and 286 selected at least once. Pairwise Jaccard similarity ranges from `0.8182` to `0.8939`, reflecting gradual changes across expanding training cutoffs. This one predeclared comparison does not tune K or establish that standalone IC selection generalizes. Univariate IC can miss nonlinear, interaction, and conditional contribution, and repeated research validation creates selection bias. The sealed holdout remains outside selection and evaluation.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

@@ -51,6 +51,8 @@ class V6PipelineIntegrationTest(unittest.TestCase):
             self.assertIn("numerai_corr_jupiter_60", per_date)
             self.assertEqual(len(loaded["metrics"]["ncorr"]["per_fold"]), 5)
             self.assertEqual(metadata["run_kind"], "synthetic_smoke")
+            self.assertNotIn("feature_selection", metadata)
+            self.assertNotIn("feature_manifests", loaded)
             self.assertEqual(len(list((experiment_dir / "models").glob("*.txt"))), 5)
             self.assertTrue((experiment_dir / "COMPLETED.json").is_file())
 

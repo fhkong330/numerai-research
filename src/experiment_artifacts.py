@@ -25,6 +25,9 @@ class V6ExperimentSpec:
     model_parameters: dict
     random_seed: int
     run_kind: str = "research"
+    feature_selection_policy_id: str | None = None
+    source_feature_quality_analysis_id: str | None = None
+    fold_feature_manifests: tuple[dict, ...] | None = None
 
 
 def current_git_state(project_root: Path | None = None) -> dict:
@@ -117,6 +120,24 @@ def save_v6_experiment_artifacts(
         raise FileExistsError(f"Experiment already exists: {experiment_dir}")
 
     fold_summaries = [fold.summary() for fold in folds]
+    feature_manifests = spec.fold_feature_manifests
+    if feature_manifests is not None:
+        if not spec.feature_selection_policy_id or not spec.source_feature_quality_analysis_id:
+            raise ValueError("Fold feature manifests require selection identities.")
+        if len(feature_manifests) != len(folds):
+            raise ValueError("Expected one feature manifest per fold.")
+        for fold, manifest in zip(folds, feature_manifests):
+            if manifest.get("fold_id") != fold.fold:
+                raise ValueError("Feature manifest fold identity does not match.")
+            if manifest.get("policy_id") != spec.feature_selection_policy_id:
+                raise ValueError("Feature manifest selection policy does not match.")
+            selected = manifest.get("model_feature_names", [])
+            if len(selected) != 250 or len(selected) != len(set(selected)):
+                raise ValueError("Each feature manifest must select exactly 250 features.")
+            if not set(selected) <= set(spec.feature_names):
+                raise ValueError("Feature manifest contains features outside the source set.")
+            if manifest.get("train_end") != fold.train_dates[-1]:
+                raise ValueError("Feature manifest training cutoff does not match its fold.")
     metadata = {
         "experiment_id": spec.experiment_id,
         "dataset_version": config.dataset_version,
@@ -149,6 +170,13 @@ def save_v6_experiment_artifacts(
             "metrics": "metrics.json",
         },
     }
+    if feature_manifests is not None:
+        metadata["feature_selection"] = {
+            "policy_id": spec.feature_selection_policy_id,
+            "source_feature_quality_analysis_id": spec.source_feature_quality_analysis_id,
+            "selected_feature_count_per_fold": 250,
+            "source_feature_count": len(spec.feature_names),
+        }
     if has_ncorr:
         metadata["ncorr_reference"] = {
             "api_display_name": "neutral_corr",
@@ -180,6 +208,20 @@ def save_v6_experiment_artifacts(
                     raise FileNotFoundError(f"Fold model file not found: {source}")
                 shutil.copy2(source, models_dir / f"fold_{fold_id}.txt")
             metadata["artifacts"]["models"] = "models/"
+        if feature_manifests is not None:
+            manifests_dir = experiment_dir / "feature_manifests"
+            manifests_dir.mkdir()
+            for manifest in feature_manifests:
+                path = manifests_dir / f"fold_{manifest['fold_id']}.json"
+                manifest_payload = {
+                    **manifest,
+                    "model_parameters": spec.model_parameters,
+                    "random_seed": spec.random_seed,
+                    "git": metadata["git"],
+                }
+                with path.open("x", encoding="utf-8") as file:
+                    json.dump(manifest_payload, file, indent=2, allow_nan=False)
+            metadata["artifacts"]["feature_manifests"] = "feature_manifests/"
         with (experiment_dir / "metadata.json").open("x", encoding="utf-8") as file:
             json.dump(metadata, file, indent=2, allow_nan=False)
         with (experiment_dir / "metrics.json").open("x", encoding="utf-8") as file:
@@ -207,7 +249,7 @@ def load_v6_experiment_artifacts(experiment_dir: Path) -> dict:
         metadata = json.load(file)
     with (experiment_dir / "metrics.json").open("r", encoding="utf-8") as file:
         metrics = json.load(file)
-    return {
+    result = {
         "metadata": metadata,
         "metrics": metrics,
         "oof_predictions": pd.read_parquet(
@@ -217,3 +259,18 @@ def load_v6_experiment_artifacts(experiment_dir: Path) -> dict:
             experiment_dir / "per_date_metrics.parquet"
         ),
     }
+    manifest_directory = metadata.get("artifacts", {}).get("feature_manifests")
+    if manifest_directory:
+        manifest_root = experiment_dir / manifest_directory
+        paths = [manifest_root / f"fold_{fold_id}.json" for fold_id in range(1, 6)]
+        missing_manifests = [path.name for path in paths if not path.is_file()]
+        if missing_manifests:
+            raise FileNotFoundError(
+                f"Experiment feature manifests are missing: {missing_manifests}"
+            )
+        manifests = []
+        for path in paths:
+            with path.open("r", encoding="utf-8") as file:
+                manifests.append(json.load(file))
+        result["feature_manifests"] = manifests
+    return result

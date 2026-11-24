@@ -49,6 +49,9 @@ class ExperimentComparisonTest(unittest.TestCase):
             result["paired_ncorr"]["candidate_outperformance_percentage"], 100.0
         )
         self.assertEqual(result["paired_ncorr"]["date_count"], 2)
+        self.assertAlmostEqual(result["paired_ncorr"]["median_difference"], 0.005)
+        self.assertAlmostEqual(result["paired_ncorr"]["largest_improvement"], 0.005)
+        self.assertAlmostEqual(result["paired_ncorr"]["largest_decline"], 0.005)
 
     def test_rejects_misaligned_oof_identity(self) -> None:
         baseline = experiment("medium")

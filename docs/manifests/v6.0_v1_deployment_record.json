@@ -1,0 +1,138 @@
+{
+  "record_version": 1,
+  "record_type": "numerai_classic_v6_v1_cloud_deployment",
+  "status": "deployed_active_no_mature_live_performance",
+  "frozen_policy": {
+    "policy_id": "numerai_classic_v6_v1",
+    "sha256": "4ccddd457707232feb7391389b4a387e57dcd1871af898aeefd82a1f8fa7381e",
+    "unchanged": true
+  },
+  "historical_evaluation": {
+    "evaluation_id": "v6_v1_final_001",
+    "record_path": "docs/manifests/v6.0_v1_final_001_evaluation_record.json",
+    "record_sha256": "f90499c30e24fb2ef790ae02d55753a9e4e68844669bf00f2c09f6fc97c57378",
+    "independent_holdout_mean_ncorr": 0.01643124430079448
+  },
+  "production_snapshot": {
+    "snapshot_id": "20261124T000455-0500_round_1404",
+    "source_round": 1404,
+    "prediction_date": "2026-11-20",
+    "features_sha256": "ee6c00bc9d5cb78aaab986630138512945301a3c588865ad61da5d0dea5ff634",
+    "train_sha256": "ac81951d1ff5925475e015d83d1252483e9c84d60f6963b2fdae7a197210bca0",
+    "validation_sha256": "34e30d0c4901461aaa16c4108099dd3ba61da3cc5136fa0fb97f943db299f996"
+  },
+  "production_model": {
+    "model_version": "v6_v1_production_002",
+    "completion_marker_sha256": "848036bfb57e7916d4d85b144acdc18549c88a3f88c7d74f466b51c251a07b5d",
+    "training_cutoff": "2026-07-24",
+    "training_dates": 1230,
+    "training_rows": 6961691,
+    "feature_date_ic_observations": 430500,
+    "components": {
+      "medium_lightgbm": {
+        "feature_count": 350,
+        "trees": 300,
+        "sha256": "2166521a0b008bf5e533c6f68b20aa7dc3ea21cf2a83afb7decbb8361848e1ca"
+      },
+      "top250_ic_lightgbm": {
+        "feature_count": 250,
+        "trees": 300,
+        "sha256": "eb4017941a0fef4917c04017b4e2000a7c4b3a5f33a6fe97d35bc0b16b112c3b"
+      }
+    },
+    "selected_feature_manifest_sha256": "5edd0fbfc82540169aa7862b8cc447144895a1692caa7b4b4bf5144509a3a273"
+  },
+  "live_validation": {
+    "round": 1405,
+    "data_datestamp": "2026-11-23",
+    "snapshot_id": "20261124T171200-0500",
+    "live_rows": 7068,
+    "live_data_sha256": "9967afb93bb4eb7d8a901c79fdba18158052a7ef0d97d4de1bc88af90c0ff2a7",
+    "submission_sha256": "8d3ddc03896afed5e60160057f120d4f16e7b7b6b0cb2f58dc86e3fe5a42bbea",
+    "completion_marker_sha256": "715f1f5b0a050cf1ce1e5b5dbdf93f43a8f2212644eb02dfdcd384c38740537a"
+  },
+  "hosted_package": {
+    "hosted_version": "v6_v1_hosted_001",
+    "filename": "numerai_v6_v1_production_002.pkl",
+    "size_bytes": 1997993,
+    "sha256": "063b200d8bf373351daa58f80cd68ff0ea3abe3a698100128c964df9a4876157",
+    "completion_marker_sha256": "933ff947adc18ae49de16b89a628275720cfcc908ed6c423d74769a202bf2524",
+    "local_compatibility": {
+      "verified": true,
+      "component_and_ensemble_max_abs_difference": 0.0,
+      "changed_component_ranks": 0,
+      "official_container_executed_locally": false
+    },
+    "runtime": {
+      "python": "3.12.6",
+      "cloudpickle": "3.1.1",
+      "lightgbm": "4.5.0",
+      "numpy": "2.1.3",
+      "pandas": "2.3.1",
+      "pyarrow": "18.1.0",
+      "scipy": "1.16.0",
+      "official_runtime_revision_full": "e782c7dc92f0e7aaf41219f90d3a9d768df6c84b"
+    }
+  },
+  "cloud_deployment": {
+    "evidence_source": "user-confirmed Numerai Dashboard screenshots and a locally inspected downloaded JSON cloud log",
+    "tournament": "Numerai Classic",
+    "model_name": "FKQT",
+    "dataset_version": "v6.0",
+    "python_runtime": "Python 3.12",
+    "hosted_filename": "numerai_v6_v1_production_002.pkl",
+    "upload_date": "2026-11-24",
+    "displayed_upload_time_local": "17:43",
+    "displayed_upload_timezone": "America/New_York",
+    "first_cloud_log_time_local_approx": "17:45:40",
+    "official_runtime_revision": "e782c7d",
+    "round": 1405,
+    "live_data_datestamp": "2026-11-23",
+    "live_prediction_rows": 7068,
+    "latest_submission": "Success",
+    "round_models_submitted": "1 / 1",
+    "hosted_configuration": "active",
+    "diagnostics": "completed",
+    "staking": "none",
+    "confirmed_cloud_steps": [
+      "model loading",
+      "official v6.0 live data loading",
+      "official benchmark data loading",
+      "prediction execution"
+    ],
+    "remote_pickle_sha256_independently_verified": false,
+    "submission_timeliness_independently_verified": false,
+    "future_scheduled_submission_observed": false
+  },
+  "official_dashboard_diagnostics": {
+    "evidence_source": "user-confirmed Numerai Dashboard screenshots",
+    "metrics": {
+      "Neutral Correlation": {"mean": 0.2229, "std": 0.0249, "sharpe": 8.963},
+      "RIC": {"mean": 0.0946, "std": 0.0284, "sharpe": 3.3261},
+      "CORRv4": {"mean": 0.0797, "std": 0.0189, "sharpe": 4.2228},
+      "ICv2": {"mean": 0.0939, "std": 0.0369, "sharpe": 2.5409, "maximum_drawdown": -0.0514},
+      "BMC60": {"mean": 0.1638, "std": null, "sharpe": null},
+      "Neutral churn": {"mean": 0.0867, "std": 0.0260, "sharpe": null}
+    },
+    "independent_out_of_sample_evaluation": false,
+    "reason": "Diagnostics begin in 2019 and substantially overlap production training through 2026-07-24.",
+    "directly_comparable_to_project_independent_holdout": false,
+    "bmc60_relabelled_as_historical_nbmc": false,
+    "late_chart_decline_cause_established": false
+  },
+  "limitations": {
+    "mature_live_performance_observed": false,
+    "statistical_significance_established": false,
+    "causality_established": false,
+    "profitability_established": false,
+    "raw_logs_versioned": false,
+    "credentials_or_account_ids_recorded": false,
+    "future_operations": [
+      "scheduled submission verification",
+      "mature live score monitoring",
+      "periodic production retraining",
+      "future V2 research",
+      "optional staking decision"
+    ]
+  }
+}

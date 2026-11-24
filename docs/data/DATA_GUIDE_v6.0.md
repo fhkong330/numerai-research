@@ -756,6 +756,180 @@ The final holdout has been evaluated and is no longer untouched. Any subsequent 
 
 The immutable evaluation summary is versioned at `docs/manifests/v6.0_v1_final_001_evaluation_record.json`. It records all verified identities and hashes, exact saved aggregate and temporal metrics, paired diagnostics, and the Research OOF comparison without raw targets, predictions, models, credentials, or datasets. The ensemble has the highest holdout mean NCORR among the three predeclared candidates, while Medium has the better holdout mean/std ratio and downside statistics. The evidence is temporally heterogeneous, its cause remains unresolved, and no statistical-significance, causal, or profitability conclusion is supported. The frozen policy remains unchanged and is retained for initial live deployment without holdout-driven tuning; this deployment state is distinct from future research.
 
+## Production Data and Deployment Audit
+
+Verified 2026-11-23 against the [official Classic data documentation](https://docs.numer.ai/numerai-tournament/data), [submission documentation](https://docs.numer.ai/numerai-tournament/submissions), [Model Upload documentation](https://docs.numer.ai/numerai-tournament/submissions/model-uploads), and [API-key documentation](https://docs.numer.ai/numerai-tournament/api). The public NumerAPI 3.1.1 catalog identifies v6.0 as the current Classic version and lists `v6.0/train.parquet`, `v6.0/validation.parquet`, `v6.0/features.json`, `v6.0/live.parquet`, and matching live/historical neutralizer, benchmark, and example-prediction files.
+
+`v6.0/live.parquet` is a latest-live path rather than a round-numbered filename. New live features arrive when a round opens, and identifiers can change between rounds. Round identity comes from `get_current_round()` plus public round metadata; round 1404 reports data datestamp 2026-11-20, target `target_jupiter_60`, open 2026-11-21 13:12:24 UTC, staking close 2026-11-22 16:00 UTC, and submission close 2026-11-24 12:00 UTC. Official scheduling is generally Tuesday–Friday for at least one hour and Saturday through Sunday, but actual times may be later; round metadata is authoritative. Late submissions are scored but cannot be staked and do not affect the Meta Model.
+
+Manual Classic CSV submissions use `numerai_ticker` as the row index and one `prediction` column of ranked values in `[0, 1]`. Future upload requires `NUMERAI_PUBLIC_ID` and `NUMERAI_SECRET_KEY` with least-privilege submission scope; credentials must remain outside source control. Hosted Models require a cloudpickled `predict(live_features, live_benchmark_models)` function, the matching Numerai Predict Python/package runtime, exact numeric feature order, and no `feature_country`. The default hosted environment is one CPU, 4 GB RAM, ten minutes, and no internet. Enabling a Hosted Model prevents manual API submissions for that model and gives Numerai access to the pickle. No private account data or credential was accessed in this audit.
+
+Official documentation states that recent 60-business-day validation targets can remain null until mature, but it does not state a fixed Classic historical-file refresh frequency or provide public catalog hashes/sizes. Therefore byte-level freshness cannot be proven from `list_datasets()` alone.
+
+### Local production eligibility
+
+| File | Bytes | SHA-256 | Rows | Coverage role |
+| --- | ---: | --- | ---: | --- |
+| `data/v6.0/features.json` | 47,870 | `ee6c00bc9d5cb78aaab986630138512945301a3c588865ad61da5d0dea5ff634` | — | Feature/target metadata |
+| `data/v6.0/train.parquet` | 2,176,263,434 | `ac81951d1ff5925475e015d83d1252483e9c84d60f6963b2fdae7a197210bca0` | 4,329,443 | 2003-01-03–2018-12-28 |
+| `data/v6.0/validation.parquet` | 1,410,842,073 | `2f4ee8b9a0a9767286663316d1a89b477d03160f6720d472cd132532a0d52a81` | 2,746,248 | 2019-01-04–2026-11-13 |
+
+The combined snapshot has 7,075,691 rows over 1,246 weekly observed dates, 1,040 feature columns including text `feature_country`, and the frozen 350 numeric Medium features in official order. The latest fully mature Jupiter-60 date is 2026-08-14. All 92,603 rows across the 13 dates from 2026-08-21 through 2026-11-13 have null Jupiter-60 labels.
+
+For production as of 2026-11-23 23:55 EST and round-1404 prediction date 2026-11-20, the rule first takes sorted observed historical dates strictly before the prediction date, removes the last 16, and then requires every retained target to be mature and finite. The exact purge is 2026-07-31, 2026-08-07, 2026-08-14, 2026-08-21, 2026-08-28, 2026-09-04, 2026-09-11, 2026-09-18, 2026-09-25, 2026-10-02, 2026-10-09, 2026-10-16, 2026-10-23, 2026-10-30, 2026-11-06, and 2026-11-13. These contain 114,000 rows. The resulting provisional cutoff is 2026-07-24, with 1,230 eligible dates and 6,961,691 rows.
+
+This rule is intentionally more conservative than null-label filtering: three fully mature dates (2026-07-31, 2026-08-07, and 2026-08-14) remain purged. It uses observed-date positions, not calendar subtraction. Current non-null values establish availability only as of the local snapshot; they do not prove the labels existed at an earlier historical timestamp.
+
+The files exactly match the research snapshot, so the existing 1,165-date/407,750-observation IC history through 2025-04-25 can be reused. Extending to the provisional cutoff requires 65 dates and 22,750 new feature-date observations, producing 430,500 total. Reuse requires exact feature order, target and IC definitions, plus identical source hashes. Any refreshed historical revision requires full IC recomputation rather than merging incompatible provenance.
+
+Before training, download fresh official train, validation, and feature metadata into `data/v6.0/snapshots/<as_of>_round_<round_number>/`; never overwrite the research snapshot. Record file hashes, API round metadata, and schema before deriving the cutoff again. This unresolved freshness check blocks production training in Task 23A.1.
+
+### Production configuration and artifacts
+
+Production configuration inherits `numerai_classic_v6_v1`: Medium-350 LightGBM, training-only absolute-mean-IC Top-250 LightGBM, frozen parameters and seed, native missing handling, official order, per-date `(rank - 0.5) / n`, and fixed 0.50/0.50 weights. Runtime fields are limited to training as-of timestamp, eligible cutoff, source snapshot identity, production model version, and training artifact identity.
+
+Proposed models live in `outputs/v6.0/production/models/<model_version>/` with configuration, snapshot identity, date/row coverage, IC provenance, selected features, two LightGBM files, hashes, diagnostics, and `PRODUCTION_TRAINING_COMPLETED.json`. Round-specific predictions live separately under `outputs/v6.0/production/predictions/round_<round_number>/`. Research, final-holdout, production-model, and live-prediction artifacts never share mutable directories.
+
+Reproduce the audit with:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.audit_production_data --version v6.0 --analysis-id v6_production_data_audit_002 --as-of 2026-11-23T23:55:00-05:00 --round-number 1404 --prediction-date 2026-11-20 --query-public-api --run
+```
+
+The saved report is `outputs/v6.0/production_audit/v6_production_data_audit_002/audit.json`. No training, IC calculation, feature selection, live download, prediction, authentication, staking, or submission occurred.
+
+### Refreshed production snapshot and trained components
+
+The isolated production snapshot is `data/v6.0/snapshots/20261124T000455-0500_round_1404/`. Public metadata was identical before and after refresh: round 1404, target `target_jupiter_60`, data datestamp 2026-11-20. Current metadata was queried again before recovery and still reported round 1404; the snapshot retains its original identity rather than being relabeled.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `features.json` | 47,870 | `ee6c00bc9d5cb78aaab986630138512945301a3c588865ad61da5d0dea5ff634` |
+| `train.parquet` | 2,176,263,434 | `ac81951d1ff5925475e015d83d1252483e9c84d60f6963b2fdae7a197210bca0` |
+| `validation.parquet` | 1,410,906,814 | `34e30d0c4901461aaa16c4108099dd3ba61da3cc5136fa0fb97f943db299f996` |
+
+The validation revision prevents reuse of prior IC. Production IC was therefore recomputed exactly over all 1,230 eligible dates and 350 Medium features: 430,500 unique feature-date observations, 0 reused dates, runtime 1,079.59 seconds. The fixed purge excludes 16 dates/114,000 rows from 2026-07-31 through 2026-11-13; the eligible range is 2003-01-03 through 2026-07-24, totaling 6,961,691 rows. The deterministic `medium_top250_abs_mean_ic_v1` manifest contains 250 unique features in official Medium order, selected-feature-list SHA-256 `8181adceedaa1dab366045d2e5aa785fa22e31eae05f5a3ef9ea40ede499186d`. It shares 234 features with the historical final-holdout selection (Jaccard `0.879699`), with no alternative policy evaluated.
+
+The original `v6_v1_production_001` attempt was interrupted by an external `KeyboardInterrupt` during IC computation. Only start/failure diagnostics exist and zero models were trained; it was not overwritten or reused. The authorized recovery `v6_v1_production_002` trained exactly two components on identical eligible rows:
+
+| Component | Features | Trees | Seconds | Bytes | SHA-256 | Reload max abs diff |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| Medium | 350 | 300 | 192.96 | 993,674 | `2166521a0b008bf5e533c6f68b20aa7dc3ea21cf2a83afb7decbb8361848e1ca` | 0.0 |
+| IC Top-250 | 250 | 300 | 142.94 | 986,194 | `eb4017941a0fef4917c04017b4e2000a7c4b3a5f33a6fe97d35bc0b16b112c3b` | 0.0 |
+
+Runtime before completion was 1,433.94 seconds. The completion marker verifies configuration, source manifest, IC artifacts/provenance, selection manifest, both models, diagnostics, and durable progress log. Reproduction commands are:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.production_training refresh --snapshot-id 20261124T000455-0500_round_1404 --round-number 1404 --run --confirm-snapshot-refresh
+.\.venv\Scripts\python.exe -B -m src.production_training train --snapshot-id 20261124T000455-0500_round_1404 --model-version v6_v1_production_002 --run --confirm-production-training
+```
+
+The historical refresh command is non-overwriting and must not be rerun against the existing snapshot ID. No live data or neutralizer was downloaded, and no live inference, Hosted Model packaging, credentials, upload, submission, or staking occurred.
+
+## Round-1405 Live Dataset and Inference
+
+Public metadata changed after production training to round 1405, target `target_jupiter_60`, data datestamp 2026-11-23, opening 2026-11-24 12:56:18 UTC and closing 2026-11-25 12:00:00 UTC. Metadata was identical before and after downloading exactly `v6.0/live.parquet`; no credentials were used. The isolated snapshot is `data/v6.0/live_snapshots/round_1405/20261124T171200-0500/`.
+
+| Live property | Verified value |
+| --- | --- |
+| File size | 4,396,446 bytes |
+| SHA-256 | `9967afb93bb4eb7d8a901c79fdba18158052a7ef0d97d4de1bc88af90c0ff2a7` |
+| Rows / columns / row groups | 7,068 / 1,068 / 1 |
+| Stock identity | `numerai_ticker`, 7,068 unique, zero duplicates |
+| Live date | 2026-11-23 |
+| Available features | 1,040: one string `feature_country`, 1,017 `int8`, 22 float |
+| Required model inputs | 350 Medium `int8`; Top-250 is an exact ordered subset |
+| Required missing values | 0 across both feature manifests |
+
+Inference reads only `numerai_ticker`, `date`, and the 350 saved Medium features. Target placeholders and irrelevant features are not loaded. Both saved boosters are hash-verified before prediction. Each raw component is independently average-rank normalized within the live date using `(rank - 0.5) / n`; the ensemble is exactly `0.50 * Medium + 0.50 * Top-250`. Shuffled-input validation produced identical predictions after ticker alignment. There are no duplicate, missing, nonfinite, or out-of-range ensemble predictions.
+
+| Prediction | Min | Mean | Median | Max | Std |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Medium rank | 0.00007074 | 0.500000 | 0.500000 | 0.99992926 | 0.28867513 |
+| Top-250 rank | 0.00007074 | 0.500000 | 0.500000 | 0.99992926 | 0.28867513 |
+| Frozen ensemble | 0.00014148 | 0.500000 | 0.49759479 | 0.99816072 | 0.26943933 |
+
+Medium-versus-Top-250 Pearson and Spearman rank correlation are both `0.742341`. These are target-free diagnostics, not historical or expected performance. The manual CSV schema is exactly `numerai_ticker,prediction`; it round-trips all 7,068 identities and has SHA-256 `8d3ddc03896afed5e60160057f120d4f16e7b7b6b0cb2f58dc86e3fe5a42bbea`. Completion-marker SHA-256 is `715f1f5b0a050cf1ce1e5b5dbdf93f43a8f2212644eb02dfdcd384c38740537a`.
+
+The initial prediction process completed inference in an externally observed 5.17 seconds but stopped during CSV persistence because pandas string dtypes differed after read-back even though all ticker values matched. The code now compares ticker values and tolerates only sub-`1e-15` CSV float serialization changes. The explicit persistence recovery reused and reverified the saved predictions without calling either model again; this recovery is recorded and hashed. Peak memory was not measured reliably.
+
+Current local versions are Python 3.12.6, LightGBM 4.7.0, NumPy 2.5.2, pandas 3.0.5, with cloudpickle absent. The current official [Numerai Predict Python-3.12 requirements](https://github.com/numerai/numerai-predict/blob/master/py3.12/requirements.txt) pin LightGBM 4.5.0, NumPy 2.1.3, pandas 2.3.1, and cloudpickle 3.1.1. Although the Python minor family matches, binary/model compatibility and serialization have not been container-tested. Hosted packaging remains blocked until Task 23C or later tests the exact official environment and two-argument function under the documented one-CPU, 4-GB, ten-minute, no-internet constraints.
+
+Reproducible commands:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.live_inference download --snapshot-id 20261124T171200-0500 --run --confirm-live-download
+.\.venv\Scripts\python.exe -B -m src.live_inference predict --live-snapshot data/v6.0/live_snapshots/round_1405/20261124T171200-0500 --model-version v6_v1_production_002 --run --confirm-live-inference
+```
+
+The download and prediction destinations are non-overwriting. The completed round-1405 artifacts must not be regenerated. No submission, upload, credential, Hosted Model package, or stake was created.
+
+## Hosted Model Compatibility and Package
+
+The official Model Upload contract was reverified on 2026-11-24 from [Numerai Model Uploads](https://docs.numer.ai/numerai-tournament/submissions/model-uploads) and [numerai-predict](https://github.com/numerai/numerai-predict) master revision `e782c7dc92f0e7aaf41219f90d3a9d768df6c84b`. A valid pickle must deserialize to a function accepting `(live_features, live_benchmark_models)`, reuse numeric training features in exact order while excluding `feature_country`, and return a one-column `prediction` DataFrame aligned to the input index. Predictions must be ranked and within `[0, 1]`. Serialization uses cloudpickle. The documented default runtime is one CPU, 4 GB RAM, ten minutes, and no internet. No distinct pickle-size limit was published in the reviewed official sources; package size is therefore recorded but not claimed compliant with an undocumented limit.
+
+The isolated `.venv_hosted` is Git-ignored and uses the minimal pinned [requirements-hosted.txt](../../requirements-hosted.txt):
+
+| Dependency | Installed / official Python-3.12 version |
+| --- | --- |
+| Python | 3.12.6 |
+| cloudpickle | 3.1.1 |
+| LightGBM | 4.5.0 |
+| NumPy | 2.1.3 |
+| pandas | 2.3.1 |
+| PyArrow | 18.1.0 |
+| SciPy | 1.16.0 |
+
+Cross-version testing loaded both existing LightGBM 4.7 text models using LightGBM 4.5. LightGBM warned that the newer model string's `bagging_by_query` parameter is unrecognized, but Medium raw, Top-250 raw, both normalized ranks, and the 50/50 ensemble all had maximum absolute difference `0.0` from the saved round-1405 reference. Zero component ranks changed. No retraining or strategy substitution occurred.
+
+The package closure embeds only the two model strings, 350/250 ordered feature-name tuples, validation logic, average-rank formula, and fixed weights. Each call constructs LightGBM 4.5 boosters from the embedded strings and predicts with `num_threads=1`. It does not import this repository or read model paths, historical data, IC artifacts, credentials, network resources, or configuration files. The second benchmark argument is accepted under the official signature but unused by the frozen strategy.
+
+| Package property | Value |
+| --- | --- |
+| Hosted version | `v6_v1_hosted_001` |
+| Filename | `numerai_v6_v1_production_002.pkl` |
+| Size | 1,997,993 bytes |
+| SHA-256 | `063b200d8bf373351daa58f80cd68ff0ea3abe3a698100128c964df9a4876157` |
+| Source completion SHA-256 | `848036bfb57e7916d4d85b144acdc18549c88a3f88c7d74f466b51c251a07b5d` |
+| Medium model SHA-256 | `2166521a0b008bf5e533c6f68b20aa7dc3ea21cf2a83afb7decbb8361848e1ca` |
+| Top-250 model SHA-256 | `eb4017941a0fef4917c04017b4e2000a7c4b3a5f33a6fe97d35bc0b16b112c3b` |
+
+Standalone testing used fresh official-version processes from temporary working directories with `PYTHONPATH` cleared and all `NUMERAI_*` variables removed. Ordered and shuffled cases each returned exactly 7,068 rows, one `prediction` column, preserved the input index, tolerated irrelevant columns, and matched the saved ensemble with maximum absolute difference `0.0`. A removed required feature failed clearly. Cold package load was 0.0353 seconds, warm load 0.0016 seconds, and inference was 1.3997/1.3967 seconds. Python `tracemalloc` peaks were approximately 29.9 MB; this excludes native LightGBM and total-process RSS. Total package build and validation took 8.98 seconds.
+
+Docker was not installed, so the official `numerai-predict` container was not run. Local compatibility does not prove cloud deployment success, Linux binary behavior, actual 4-GB RSS, or upload acceptance. Reproduction:
+
+```powershell
+.\.venv\Scripts\python.exe -m venv .venv_hosted
+.\.venv_hosted\Scripts\python.exe -m pip install -r requirements-hosted.txt
+.\.venv_hosted\Scripts\python.exe -B -m unittest tests.test_hosted_model -v
+.\.venv_hosted\Scripts\python.exe -B -m src.hosted_model --hosted-version v6_v1_hosted_001 --model-version v6_v1_production_002 --live-snapshot data/v6.0/live_snapshots/round_1405/20261124T171200-0500 --reference-dir outputs/v6.0/production/predictions/round_1405/v6_v1_production_002 --run --confirm-hosted-package
+```
+
+## Hosted Deployment and Round-1405 Submission
+
+On 2026-11-24 the user manually uploaded `numerai_v6_v1_production_002.pkl` through the Numerai Dashboard for Classic model `FKQT`, selecting dataset v6.0 and Python 3.12. The displayed upload time was 5:43 PM New York time. The first cloud log was approximately 5:45:40 PM and identified official runtime revision `e782c7d`. Sanitized evidence confirms model loading, official v6.0 live-feature and benchmark-model loading for datestamp 2026-11-23, and prediction over 7,068 rows. The dashboard showed Latest Submission `Success`, round 1405 models submitted `1 / 1`, Hosted configuration active, Diagnostics complete, and no staking.
+
+The raw downloaded JSON log exists locally under ignored production outputs and was inspected without modification. It contains private storage URLs and is intentionally not versioned or reproduced here. Dashboard facts are user-confirmed evidence; the local package size and SHA-256 are independently verified, but the remote stored-object hash is not. Submission timeliness was not independently established, and no future scheduled automatic submission has yet been observed.
+
+The version-controlled deployment record is `docs/manifests/v6.0_v1_deployment_record.json`. It links the frozen-policy and historical-evaluation identities to the production snapshot, trained components, live inference, hosted package, and sanitized cloud result without embedding data, predictions, model contents, credentials, private URLs, or account identifiers.
+
+### Official Diagnostics interpretation
+
+The following values were transcribed from the user-confirmed official dashboard:
+
+| Metric | Mean | Std | Sharpe |
+| --- | ---: | ---: | ---: |
+| Neutral Correlation | 0.2229 | 0.0249 | 8.963 |
+| RIC | 0.0946 | 0.0284 | 3.3261 |
+| CORRv4 | 0.0797 | 0.0189 | 4.2228 |
+| ICv2 | 0.0939 | 0.0369 | 2.5409 |
+| BMC60 | 0.1638 | unavailable | unavailable |
+| Neutral churn | 0.0867 | 0.0260 | unavailable |
+
+The displayed ICv2 maximum drawdown was `-0.0514`. These official Diagnostics are not an independent out-of-sample evaluation: the chart begins in 2019, whereas the deployed production models train through 2026-07-24, creating substantial overlap. Neutral Correlation `0.2229` therefore must not be presented as genuine independent predictive performance, and the dashboard protocol is not directly comparable with the project's fixed 52-date holdout without matching evaluation definitions and samples. BMC60 is not historical NBMC. The sharp late-chart decline is observed but unexplained. No mature live performance has yet been observed.
+
+V1 development is complete. Future scheduled-submission verification, mature live monitoring, periodic retraining, V2 research, and any staking decision are operational follow-ups rather than extensions of this historical research record.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

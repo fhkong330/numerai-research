@@ -348,6 +348,24 @@ The paired Ridge-minus-LightGBM NCORR mean is `-0.00802839` with standard deviat
 
 Fold training times are 27.1, 31.0, 34.0, 37.1, and 40.5 seconds for 4.23–6.28 million rows. Every fold uses a 20,000-row maximum batch, has 350 finite nonzero coefficients, no constant/all-missing feature, and a 37–38 KiB JSON model. Coefficient norms decline from `0.016052` to `0.013355`. Nonzero linear coefficients are not comparable to LightGBM Gain importance. Reliable process peak memory was unavailable; only the bounded buffer design is documented. The sealed holdout remains untouched.
 
+### Three-model saved-prediction diversity audit
+
+Task 20C compares saved OOF predictions from `v6_medium_baseline_001` (A), `v6_medium_top250_ic_002` (B), and `v6_medium_ridge_003` (C). It canonicalizes `date`, `numerai_ticker`, `composite_figi`, and `fold_id`; no target column is accessed and no score or ensemble prediction is calculated.
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.analyze_prediction_diversity --version v6.0 --analysis-id v6_three_model_diversity_001 --experiment-a v6_medium_baseline_001 --experiment-b v6_medium_top250_ic_002 --experiment-c v6_medium_ridge_003
+```
+
+| Pair | Mean Pearson | Mean Spearman | Mean rank disagreement | Top-decile overlap | Bottom-decile overlap |
+|---|---:|---:|---:|---:|---:|
+| A vs B | 0.7283 | 0.7275 | 0.1532 | 53.43% | 52.53% |
+| A vs C | 0.5238 | 0.5271 | 0.2174 | 33.34% | 33.83% |
+| B vs C | 0.5145 | 0.5181 | 0.2198 | 32.87% | 32.95% |
+
+No pair exceeds 0.9 on any date. A–B never falls below 0.5; A–C Pearson/Spearman falls below 0.5 on 4.85%/3.33% of dates, and B–C on 20.61%/16.06%. A–B is stable and rises from mean Spearman `0.7140` in 2019 to `0.7356` in 2024 and `0.7324` in partial 2025. Tree–Ridge agreement weakens later: A–C Spearman is `0.5114` in 2024 and `0.5042` in partial 2025; B–C is `0.4977` and `0.4929`. Fold 5 B–C has mean Spearman `0.4930`, mean rank disagreement `0.2268`, and about 31% top/bottom-decile overlap.
+
+The ten lowest-agreement dates for the tree–Ridge pairs are concentrated mainly in 2024–2025, but their full-period standard deviations remain only `0.0156`–`0.0161` for Spearman, so disagreement is persistent as well as somewhat stronger recently. Lower prediction correlation does not imply higher NCORR, positive ensemble value, or an optimal weight. No ensemble, target analysis, or new performance result was produced, and the sealed holdout remains untouched.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

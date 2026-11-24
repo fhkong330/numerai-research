@@ -789,3 +789,33 @@ Training sample counts are 4,227,405; 4,715,780; 5,231,777; 5,767,397; and 6,284
 ### Research interpretation
 
 The fixed Ridge baseline materially underperforms LightGBM overall, although its 2024 behavior differs. That isolated reversal does not prove complementarity, justify ensembling, or identify a cause. No alpha tuning, additional linear model, feature selection, LightGBM rerun, ensemble experiment, or holdout evaluation occurred. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 20C: Three-Model Saved-Prediction Diversity Audit
+
+### Scope and integrity
+
+Analyzed saved OOF predictions from `v6_medium_baseline_001` (A), `v6_medium_top250_ic_002` (B), and `v6_medium_ridge_003` (C). The analyzer canonicalized the four row-identity fields rather than trusting physical Parquet order. All experiments have identical 330 dates, 2,180,295 identities, fold assignments, target/scoring metadata, and NCORR references, with zero duplicates, missing/non-finite predictions, or protected dates. No target column was selected, no NCORR was recomputed, and no model or ensemble prediction was created.
+
+The exact command was:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.analyze_prediction_diversity --version v6.0 --analysis-id v6_three_model_diversity_001 --experiment-a v6_medium_baseline_001 --experiment-b v6_medium_top250_ic_002 --experiment-c v6_medium_ridge_003
+```
+
+### Overall agreement
+
+A–B Pearson has mean/median/std/min/max `0.7283`/`0.7309`/`0.0129`/`0.6985`/`0.7534`; Spearman is `0.7275`/`0.7297`/`0.0119`/`0.6916`/`0.7522`. A–C Pearson is `0.5238`/`0.5227`/`0.0159`/`0.4835`/`0.5636`; Spearman is `0.5271`/`0.5261`/`0.0156`/`0.4904`/`0.5672`. B–C Pearson is `0.5145`/`0.5165`/`0.0175`/`0.4686`/`0.5630`; Spearman is `0.5181`/`0.5205`/`0.0161`/`0.4794`/`0.5513`.
+
+No pair exceeds 0.9 on any date. A–B never falls below 0.5; A–C falls below 0.5 on 4.85% Pearson and 3.33% Spearman dates, while B–C does so on 20.61% and 16.06%. Mean percentile-rank disagreement is `0.1532`, `0.2174`, and `0.2198`. Mean top/bottom-decile overlap is 53.43%/52.53%, 33.34%/33.83%, and 32.87%/32.95% for A–B, A–C, and B–C.
+
+### Temporal findings
+
+A–B Spearman is comparatively stable and rises from `0.7140` in 2019 to `0.7356` in 2024 and `0.7324` in partial 2025. A–C is `0.5478` in 2021 but falls to `0.5114` in 2024 and `0.5042` in partial 2025. B–C falls from `0.5302` in 2021 to `0.4977` and `0.4929`. Fold results agree: A–C/B–C end at `0.5042`/`0.4930` in Fold 5, with rank disagreements `0.2233`/`0.2268` and top-decile overlaps `31.41%`/`31.26%`.
+
+The lowest A–C agreement dates are concentrated mainly in early 2025; the lowest B–C dates mainly in late 2024 and early 2025. Still, full-period tree–Ridge Spearman standard deviations are only about `0.016`, so moderate disagreement is persistent, not solely an isolated-period phenomenon.
+
+### Interpretation and status
+
+Ridge predictions are materially less correlated with either LightGBM than the two LightGBMs are with each other, particularly recently. This is a diversity observation only. Low prediction correlation does not establish positive ensemble value, incremental alpha, or a valid weighting rule—especially because the Ridge baseline underperforms. Saved artifacts include 990 pair-date rows, fold/year summaries, rank and decile diagnostics, metadata, research summary, and a completion marker under `v6_three_model_diversity_001`. No new performance result or ensemble was produced, and the final holdout remains sealed.

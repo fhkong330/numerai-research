@@ -625,6 +625,24 @@ Ridge annual NCORR for 2019–2025 is `0.013576`, `0.004749`, `0.030541`, `0.022
 
 Ridge underperforms overall and is unstable across periods despite outperforming in Fold 4 and 2024. This does not establish statistical significance, causality, or useful ensemble complementarity. Its additive form may underfit nonlinear interactions; alpha remains untuned, and the sealed holdout remains outside evaluation.
 
+## Saved-Prediction Diversity Audit
+
+Task 20C reads the completed OOF artifacts for Medium LightGBM (A: `v6_medium_baseline_001`), fold-specific Top-250 LightGBM (B: `v6_medium_top250_ic_002`), and Medium Ridge (C: `v6_medium_ridge_003`). All have 330 dates and 2,180,295 exact canonical identities with identical targets, folds, metric identities, and NCORR reference metadata. The analyzer selects identity and prediction columns only; metadata records `target_columns_accessed: []`.
+
+For each pair and date, Pearson correlation uses raw predictions and Spearman uses average within-date ranks. Mean absolute percentile-rank disagreement is scale-free. Top and bottom deciles contain `ceil(0.10 * date_rows)` observations using stable prediction order, and overlap is reported relative to that decile count. Missing/non-finite and constant-prediction diagnostics are explicit; the real inputs contain none.
+
+| Pair | Pearson mean / median / std / min / max | Spearman mean / median / std / min / max | Rank disagreement | Top / bottom overlap |
+|---|---|---|---:|---:|
+| A vs B | 0.7283 / 0.7309 / 0.0129 / 0.6985 / 0.7534 | 0.7275 / 0.7297 / 0.0119 / 0.6916 / 0.7522 | 0.1532 | 53.43% / 52.53% |
+| A vs C | 0.5238 / 0.5227 / 0.0159 / 0.4835 / 0.5636 | 0.5271 / 0.5261 / 0.0156 / 0.4904 / 0.5672 | 0.2174 | 33.34% / 33.83% |
+| B vs C | 0.5145 / 0.5165 / 0.0175 / 0.4686 / 0.5630 | 0.5181 / 0.5205 / 0.0161 / 0.4794 / 0.5513 | 0.2198 | 32.87% / 32.95% |
+
+No pair has a date above 0.9 Pearson or Spearman. A–B has no date below 0.5. A–C has 4.85%/3.33% of dates below 0.5 Pearson/Spearman; B–C has 20.61%/16.06%. A–B mean Spearman by fold is `0.7138`, `0.7252`, `0.7346`, `0.7352`, and `0.7328`. A–C is `0.5271`, `0.5396`, `0.5325`, `0.5146`, and `0.5042`; B–C is `0.5227`, `0.5236`, `0.5277`, `0.5042`, and `0.4930`.
+
+Calendar results show the same recent divergence. A–B mean Spearman is `0.7356` in 2024 and `0.7324` in partial 2025. A–C declines to `0.5114` and `0.5042`; B–C declines to `0.4977` and `0.4929`. B–C top-decile overlap is 32.07% in 2024 and 31.46% in partial 2025, with bottom overlap 30.76% and 30.55%. The lowest A–C dates are mostly in early 2025; the lowest B–C dates are mostly in late 2024 and early 2025. However, moderate tree–Ridge disagreement exists throughout the history rather than on only a few dates.
+
+Artifacts are saved under `outputs/v6.0/prediction_diversity/v6_three_model_diversity_001/` with metadata, completion marker, per-date correlations, fold and annual summaries, rank disagreement, decile overlap, and compact JSON summary. The analysis does not use targets, recalculate NCORR, train a model, or form an ensemble. Correlation alone does not demonstrate incremental alpha, useful complementarity, or an appropriate ensemble weight. The final holdout remains sealed.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

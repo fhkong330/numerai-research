@@ -391,6 +391,27 @@ Task 21B executed both commands exactly once. Ensemble A completed in about 4m04
 
 Ensemble A minus Medium has mean/median NCORR difference `+0.002005`/`+0.001872`, wins 63.94% of dates, and improves four of five folds; versus Top-250 it is `+0.001799`/`+0.001441`, wins 58.79%, and improves four folds but reverses slightly in Fold 5 and 2024–2025. Ensemble B minus A is `-0.000175`/`-0.000088`, wins 49.09%, and improves only Fold 4 materially; its 2024 gain is `+0.003675`, while 2019, 2020, 2023, and partial 2025 weaken. Thus the fixed Ridge allocation does not improve full-period mean NCORR, though it raises the mean/std ratio slightly and helps 2024. These are repeated Research Validation observations without dependence-aware significance inference, not a final V1 selection. The holdout remains sealed.
 
+### Frozen v6 V1 research policy
+
+Task 21C freezes `medium_top250_rank_equal_v1` in `docs/manifests/v6.0_v1_policy.json`. V1 combines a fresh official Medium-350 LightGBM and a fresh fold-independent Top-250 LightGBM selected by `medium_top250_abs_mean_ic_v1`, then average-rank normalizes each component within date and weights them 0.50/0.50. Both use the unchanged 300-tree, 0.05 learning-rate, 31-leaf LightGBM configuration, seed 42, native NaN handling, official feature order, Jupiter-60 target, 16 observed-date purge convention, official NCORR, and separately labeled Legacy CORR. The manifest freezes the selection algorithm and cutoff, not a historical fold's feature list. Ridge is excluded.
+
+Ensemble A was selected because it has the strongest Research OOF mean NCORR (`0.028126`), improves over Medium and Top-250 by `+0.002005` and `+0.001799` on average, and adds little operational complexity beyond a second tree model. It is not uniformly better: it loses to Medium in Fold 1/2019 and to Top-250 in Fold 5 and 2024–partial-2025. Ensemble B's full-period mean is lower (`0.027951`) and its Ridge allocation helps mainly in 2024/Fold 4. These repeated-validation results are neither causal nor dependence-aware significance evidence and do not guarantee future generalization; historical NMMC and NBMC references remain unavailable.
+
+The independent final protocol remains unexecuted. Eligible training ends 2025-04-25, followed by the fixed 16-date gap (2025-05-02–2025-08-15) and the sealed 52-date/365,363-row holdout (2025-08-22–2026-08-14); 13 immature dates remain excluded. Task 22A must add a final-training IC mode through 2025-04-25, train two fresh fixed models, and persist component plus ensemble predictions before any holdout target is opened. The current IC audit ends 2024-08-30 and cannot supply that ranking. Holdout evaluation must report NCORR mean/std/ratio, positive rate, worst week, P10, Legacy CORR, component diagnostics, and identity integrity without tuning or arbitrary pass thresholds. A weak result must be reported, and any later holdout-informed work becomes a new development phase. The holdout remains sealed.
+
+### Sealed final-holdout infrastructure
+
+Task 22A adds synthetic-tested primitives without executing them on real data. The final-training loader reads labeled Train plus Validation only through 2025-04-25, rejects null labels and protected dates, and preserves feature dtypes/order. The target-free holdout loader requests only identity and feature columns. Final IC aggregation safely merges provenance-compatible saved and newly authorized observations, requires complete coverage through the cutoff, and applies the frozen deterministic Top-250 policy.
+
+Preparation and scoring use separate directories and states beneath `outputs/v6.0/final_holdout/<evaluation_id>/`. Preparation hashes the frozen policy, final feature manifest, two models, both component predictions, and ensemble predictions before writing `PREPARATION_COMPLETED.json`. Only an explicit scoring authorization after re-verifying every hash can load targets. Scoring uses a dedicated holdout-only neutralizer loader while the Research OOF loader continues rejecting holdout dates, then writes separate metrics and `FINAL_EVALUATION_COMPLETED.json`. Existing IDs cannot be overwritten or silently rescored.
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.final_holdout prepare --version v6.0 --evaluation-id v6_v1_final_001 --run --confirm-final-preparation
+.\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
+```
+
+Task 22A deliberately leaves real execution disabled until a separately reviewed Task 22B runner wires these validated primitives. No real data was prepared, predicted, targeted, or scored. Software checks provide auditable guardrails but cannot stop a person with direct filesystem access from bypassing them. The final holdout remains sealed.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

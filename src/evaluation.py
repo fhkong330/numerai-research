@@ -283,6 +283,7 @@ def calculate_v6_ncorr_by_date(
     oof: pd.DataFrame,
     neutralizer_path=None,
     expected_neutralizer_count: int = 300,
+    reference_loader=load_validation_neutralizers_for_date,
 ) -> pd.DataFrame:
     """Calculate official NCORR independently for each approved research date."""
     config = get_research_config("v6.0")
@@ -312,7 +313,7 @@ def calculate_v6_ncorr_by_date(
     rows = []
     for date, group in oof.groupby("date", sort=True):
         identity = group.loc[:, identity_columns]
-        neutralizers = load_validation_neutralizers_for_date(
+        neutralizers = reference_loader(
             str(date),
             identity,
             path=reference_path,

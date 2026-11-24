@@ -671,6 +671,37 @@ The A-minus-Medium fold differences are `-0.001628`, `+0.003248`, `+0.002459`, `
 
 Both artifacts have exact source hashes, 2,180,295 finite canonical predictions over 330 dates, official neutralizer hash `1ae870b1…c6c6f`, and no model files or protected dates. Runs took about 4m04s and 3m43s and occupy 23.18 MB and 24.14 MB; peak memory was not measured reliably. No statistical-significance claim or final policy selection is made. Repeated use of the same Research Validation history creates selection bias, and the sealed holdout remains untouched.
 
+## Frozen V1 Policy and Final Holdout Protocol
+
+The machine-readable freeze is `docs/manifests/v6.0_v1_policy.json`, policy `numerai_classic_v6_v1`. It freezes two fresh LightGBM components: official Medium 350 and a 250-feature subset recomputed at the final training cutoff using `medium_top250_abs_mean_ic_v1`. Selection ranks descending absolute mean per-date training-history Spearman IC, places undefined statistics last, breaks ties by feature name, requires 250 valid features, and restores official Medium ordering for model input. It does not reuse any historical fold list.
+
+Both components use `n_estimators=300`, `learning_rate=0.05`, `num_leaves=31`, `random_state=42`, `n_jobs=-1`, LightGBM native NaN handling, and no learned imputation. Per-date average-rank normalization is `(rank - 0.5) / n`; component weights are 0.50/0.50. Primary scoring is official NCORR v1 through `numerai-tools==0.7.2` and neutralizer SHA-256 `1ae870b1…c6c6f`; Legacy CORR is a separately named diagnostic. Ridge is excluded.
+
+The final boundaries were verified without selecting a target column: eligible training ends 2025-04-25; the gap has 16 observed dates and 107,987 rows from 2025-05-02 through 2025-08-15; the sealed holdout has 52 mature dates and 365,363 rows from 2025-08-22 through 2026-08-14; the 13 immature dates from 2026-08-21 through 2026-11-13 remain excluded. The gap preserves the approved Jupiter-60 16-date maturity separation.
+
+Future execution is deliberately two phase. First, a target-safe preparation phase must load only eligible labeled history through 2025-04-25, recompute IC through that cutoff, select Top-250, train both fresh models, generate all component and ensemble holdout predictions, validate identities, and persist immutable models/manifests/predictions before holdout targets are authorized. Second, a separate explicit scoring phase may open the 52 holdout targets and calculate official NCORR and Legacy CORR. Models, features, weights, normalization, and parameters remain fixed throughout all dates and cannot respond to holdout results.
+
+Task 22A therefore needs: a final-training loader distinct from ordinary Research OOF loaders; extension of feature-quality coverage beyond the existing 2024-08-30 Fold-5 cutoff to 2025-04-25; one as-of final-selection manifest; two-model full-history training; a pre-target prediction artifact contract; canonical holdout alignment; and a separate scoring authorization boundary. Existing ordinary loaders correctly exclude holdout targets and must retain that default. No holdout-driven feature selection, tuning, weight search, or model replacement is permitted.
+
+Final reporting is predeclared: mean/std/mean-to-std NCORR, positive-date percentage, worst weekly NCORR, P10 NCORR, separately labeled Legacy CORR, both component diagnostics, exact date/row integrity, and an explicitly period-qualified comparison with Research OOF. There is no arbitrary pass threshold. Weak results must be reported honestly; subsequent work informed by them is a new development phase, not independent validation. Historical NMMC and NBMC references remain unavailable. The holdout is still sealed and no final predictions or scores exist.
+
+## Sealed Final-Holdout Infrastructure
+
+Task 22A implements, but does not run, dedicated final-training and holdout primitives. Final training combines only mature labeled history ending 2025-04-25 and rejects the gap or any later row. Holdout preparation reads only identity plus frozen feature columns; any target-prefixed column is rejected. Existing Research OOF loaders and neutralizer access remain unchanged and continue rejecting protected dates.
+
+The final IC interface accepts reusable per-date observations only when dataset, target, exact ordered Medium list, and IC definition match. It merges additional authorized observations, rejects duplicates or dates after 2025-04-25, requires the complete date-feature Cartesian coverage, and then applies the unchanged absolute-mean-IC Top-250 ranking, deterministic feature-name tie break, and official-order restoration. No real missing coverage was computed in Task 22A.
+
+Preparation artifacts live under `final_holdout/<evaluation_id>/preparation/`: copied frozen policy, selection manifest, two models, Medium/Top-250/ensemble predictions, metadata, SHA-256 for every artifact, Git identity, target-access record `[]`, and `PREPARATION_COMPLETED.json`. Scoring is a distinct `scoring/` state and cannot begin without explicit target authorization, complete preparation, policy and artifact hash verification, exact 52-date/365,363-row canonical coverage, finite predictions, and no previous final marker. It stores per-date metrics, aggregate reporting, component diagnostics, official reference identity, and `FINAL_EVALUATION_COMPLETED.json`.
+
+The dedicated holdout neutralizer function accepts only the frozen 52 dates and performs the same schema, identity, order, and finiteness checks as Research OOF. NCORR and Legacy CORR formulas are unchanged. The reporting contract adds worst-week and P10 NCORR to the existing mean/std/ratio and positive-date summaries and forbids automatic model selection.
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.final_holdout prepare --version v6.0 --evaluation-id v6_v1_final_001 --run --confirm-final-preparation
+.\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
+```
+
+Real execution remains deliberately disabled pending Task 22B review and wiring. This preserves the independent-validation boundary after infrastructure tests. Local safeguards are auditable accident-prevention controls, not a security boundary against deliberate direct filesystem modification. No real training, IC, prediction, target access, or score occurred; the holdout remains sealed.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

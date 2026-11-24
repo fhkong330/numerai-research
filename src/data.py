@@ -50,6 +50,12 @@ class V6TrainingData:
     target: pd.Series
 
 
+@dataclass(frozen=True)
+class V6HoldoutFeatures:
+    features: pd.DataFrame
+    identity: pd.DataFrame
+
+
 def load_feature_set(
     feature_set_name: str,
     dataset_version: str = DATASET_VERSION,
@@ -144,6 +150,92 @@ def prepare_v6_training_data(
         features=data.loc[:, features],
         target=data.loc[:, config.target_column],
     )
+
+
+def prepare_v6_final_training_data(
+    historical: pd.DataFrame,
+    research: pd.DataFrame,
+    features: list[str],
+) -> V6TrainingData:
+    """Combine only labeled history through the frozen final-training cutoff."""
+    config = get_research_config("v6.0")
+    required = {config.time_column, config.target_column, *features}
+    _require_columns(historical, required, "final historical training")
+    _require_columns(research, required, "final research training")
+    combined = pd.concat(
+        [historical.loc[:, list(required)], research.loc[:, list(required)]],
+        axis=0,
+    ).sort_values(config.time_column, kind="stable")
+    dates = combined[config.time_column].astype(str)
+    if dates.max() > config.research_end:
+        raise ValueError("Final training includes rows after the frozen cutoff.")
+    protected_start = config.holdout_gap_start
+    if dates.ge(protected_start).any():
+        raise ValueError("Final training includes gap, holdout, or immature rows.")
+    _require_mature_target(combined, config, "final training data")
+    return V6TrainingData(
+        features=combined.loc[:, features],
+        target=combined.loc[:, config.target_column],
+    )
+
+
+def prepare_v6_holdout_features(
+    frame: pd.DataFrame,
+    features: list[str],
+) -> V6HoldoutFeatures:
+    """Select holdout features and identity while rejecting every target column."""
+    config = get_research_config("v6.0")
+    required = {*V6_IDENTITY_COLUMNS, *features}
+    _require_columns(frame, required, "final holdout features")
+    target_columns = [name for name in frame.columns if name.startswith("target")]
+    if target_columns:
+        raise ValueError("Target columns are forbidden during holdout preparation.")
+    dates = frame[config.time_column].astype(str)
+    if dates.nunique() != config.expected_holdout_dates:
+        raise ValueError("Holdout features do not contain exactly 52 dates.")
+    if dates.min() != config.holdout_start or dates.max() != config.holdout_end:
+        raise ValueError("Holdout feature dates do not match frozen boundaries.")
+    identity = frame.loc[:, V6_IDENTITY_COLUMNS]
+    if identity.duplicated().any():
+        raise ValueError("Holdout feature identities contain duplicates.")
+    return V6HoldoutFeatures(
+        features=frame.loc[:, features],
+        identity=identity,
+    )
+
+
+def load_v6_final_training_data(
+    features: list[str], data_dir: Path | None = None
+) -> V6TrainingData:
+    """Read eligible Train and Validation rows; never read protected targets."""
+    config = get_research_config("v6.0")
+    data_dir = data_dir or resolve_data_dir("v6.0")
+    columns = [config.time_column, config.target_column, *features]
+    historical = pq.read_table(data_dir / "train.parquet", columns=columns).to_pandas()
+    research = pq.read_table(
+        data_dir / "validation.parquet",
+        columns=columns,
+        filters=[(config.time_column, "<=", config.research_end)],
+    ).to_pandas()
+    return prepare_v6_final_training_data(historical, research, features)
+
+
+def load_v6_final_holdout_features(
+    features: list[str], data_dir: Path | None = None
+) -> V6HoldoutFeatures:
+    """Read only feature and identity columns for the sealed holdout."""
+    config = get_research_config("v6.0")
+    data_dir = data_dir or resolve_data_dir("v6.0")
+    columns = [*V6_IDENTITY_COLUMNS, *features]
+    frame = pq.read_table(
+        data_dir / "validation.parquet",
+        columns=columns,
+        filters=[
+            (config.time_column, ">=", config.holdout_start),
+            (config.time_column, "<=", config.holdout_end),
+        ],
+    ).to_pandas()
+    return prepare_v6_holdout_features(frame, features)
 
 
 def _ordered_v6_indices(data: pd.DataFrame, dates: tuple[str, ...]) -> pd.Index:

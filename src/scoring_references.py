@@ -47,6 +47,13 @@ def approved_research_dates() -> set[str]:
     )
 
 
+def approved_final_holdout_dates() -> set[str]:
+    config = get_research_config("v6.0")
+    return set(
+        pd.date_range(config.holdout_start, config.holdout_end, freq="7D").strftime("%Y-%m-%d")
+    )
+
+
 def load_validation_neutralizers_for_date(
     date: str,
     expected_identity: pd.DataFrame,
@@ -100,5 +107,35 @@ def load_validation_neutralizers_for_date(
     neutralizers = reference.loc[:, columns]
     if neutralizers.isna().any().any() or not np.isfinite(neutralizers).all().all():
         raise ValueError(f"Neutralizers contain missing or nonfinite values for {date}.")
+    neutralizers.index = expected_identity.index
+    return neutralizers
+
+
+def load_final_holdout_neutralizers_for_date(
+    date: str,
+    expected_identity: pd.DataFrame,
+    path: Path | None = None,
+    expected_count: int = V6_NEUTRALIZER_COLUMN_COUNT,
+) -> pd.DataFrame:
+    """Holdout-only wrapper that preserves the Research OOF date restriction."""
+    date = str(date)
+    if date not in approved_final_holdout_dates():
+        raise ValueError(f"Unsupported NCORR final-holdout date: {date}")
+    # Perform the same exact schema, identity, and finiteness checks as research access.
+    missing_identity = sorted(set(REFERENCE_IDENTITY_COLUMNS) - set(expected_identity.columns))
+    if missing_identity or expected_identity.empty:
+        raise ValueError("Final-holdout neutralizer identity is incomplete.")
+    path = path or validation_neutralizer_path()
+    columns = ordered_neutralizer_columns(path, expected_count)
+    reference = pd.read_parquet(
+        path, columns=[*REFERENCE_IDENTITY_COLUMNS, *columns], filters=[("date", "=", date)]
+    )
+    expected_keys = expected_identity.loc[:, REFERENCE_IDENTITY_COLUMNS].reset_index(drop=True).astype("string")
+    reference_keys = reference.loc[:, REFERENCE_IDENTITY_COLUMNS].reset_index(drop=True).astype("string")
+    if reference.empty or reference.duplicated(list(REFERENCE_IDENTITY_COLUMNS)).any() or not reference_keys.equals(expected_keys):
+        raise ValueError(f"Final-holdout neutralizers do not align for {date}.")
+    neutralizers = reference.loc[:, columns]
+    if neutralizers.isna().any().any() or not np.isfinite(neutralizers).all().all():
+        raise ValueError(f"Final-holdout neutralizers are invalid for {date}.")
     neutralizers.index = expected_identity.index
     return neutralizers

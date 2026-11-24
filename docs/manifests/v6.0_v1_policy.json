@@ -1,0 +1,127 @@
+{
+  "manifest_version": 1,
+  "policy_id": "numerai_classic_v6_v1",
+  "status": "frozen_research_policy",
+  "frozen_at_git_commit": "c735fb3fe822df15e67b5d3fffe92ecfceae9f43",
+  "dataset_version": "v6.0",
+  "target": "target_jupiter_60",
+  "time_column": "date",
+  "components": [
+    {
+      "component_id": "medium_lightgbm",
+      "feature_universe": "official_medium_numeric",
+      "feature_count": 350,
+      "feature_list_sha256": "1232c4f87c05a4643e546a39f8a48c54f2a1d71ed99852f6679f490106a69af5",
+      "feature_order": "official Medium order",
+      "feature_selection": null,
+      "source_experiment_id": "v6_medium_baseline_001"
+    },
+    {
+      "component_id": "medium_top250_ic_lightgbm",
+      "feature_universe": "official_medium_numeric",
+      "source_feature_count": 350,
+      "selected_feature_count": 250,
+      "feature_list_sha256": "1232c4f87c05a4643e546a39f8a48c54f2a1d71ed99852f6679f490106a69af5",
+      "feature_order": "selected membership restored to official Medium order",
+      "feature_selection": {
+        "policy_id": "medium_top250_abs_mean_ic_v1",
+        "ranking_statistic": "absolute training-history mean per-date Spearman IC",
+        "ranking_direction": "descending",
+        "undefined_policy": "rank last and require 250 valid features",
+        "tie_break": "feature name ascending",
+        "as_of_cutoff": "2025-04-25",
+        "recompute_for_final_training": true
+      },
+      "source_experiment_id": "v6_medium_top250_ic_002"
+    }
+  ],
+  "model": {
+    "family": "LightGBM LGBMRegressor",
+    "parameters": {
+      "n_estimators": 300,
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "random_seed": 42,
+    "missing_value_handling": "LightGBM native NaN handling; no learned imputation",
+    "fresh_model_per_component": true
+  },
+  "ensemble": {
+    "policy_id": "medium_top250_rank_equal_v1",
+    "component_weights": {
+      "medium_lightgbm": 0.5,
+      "medium_top250_ic_lightgbm": 0.5
+    },
+    "normalization": "per-date average rank normalized as (rank - 0.5) / n",
+    "ridge_excluded": true
+  },
+  "scoring": {
+    "primary": {
+      "metric": "NCORR",
+      "api_display_name": "neutral_corr",
+      "metric_version": 1,
+      "official_function": "numerai_tools.scoring.neutral_correlation",
+      "numerai_tools_version": "0.7.2",
+      "neutralizer_dataset_version": "v6.0",
+      "neutralizer_sha256": "1ae870b17d501b8d9ec114ab2096eece342812c424a826f44a772087a82c6c6f"
+    },
+    "diagnostic": {
+      "metric": "NUMERAI_CORR_JUPITER_60",
+      "label": "Legacy CORR"
+    },
+    "nmmc_available_historically": false,
+    "nbmc_available_historically": false
+  },
+  "purge": {
+    "unit": "sorted observed weekly dates",
+    "dates": 16,
+    "purpose": "Jupiter-60 label-maturity separation"
+  },
+  "final_training": {
+    "eligible_data_end": "2025-04-25",
+    "feature_ic_recompute_end": "2025-04-25",
+    "models_fixed_before_holdout_targets": true
+  },
+  "final_holdout": {
+    "gap_start": "2025-05-02",
+    "gap_end": "2025-08-15",
+    "gap_dates": 16,
+    "holdout_start": "2025-08-22",
+    "holdout_end": "2026-08-14",
+    "holdout_dates": 52,
+    "expected_rows": 365363,
+    "immature_start": "2026-08-21",
+    "immature_end": "2026-11-13",
+    "immature_dates": 13,
+    "targets_sealed": true,
+    "no_holdout_driven_selection": true
+  },
+  "source_artifacts": {
+    "research_experiments": [
+      "v6_small_baseline_002",
+      "v6_medium_baseline_001",
+      "v6_medium_top250_ic_002",
+      "v6_medium_ridge_003"
+    ],
+    "research_ensembles": [
+      "v6_medium_top250_rank_equal_001",
+      "v6_medium_top250_ridge_rank_442_002"
+    ],
+    "feature_quality_analysis": "v6_medium_ic_001",
+    "model_importance_analysis": "v6_medium_importance_001",
+    "prediction_diversity_analysis": "v6_three_model_diversity_001"
+  },
+  "research_evidence": {
+    "small_ncorr": 0.015617478074111596,
+    "medium_ncorr": 0.026121414089345783,
+    "top250_ncorr": 0.026326839082861143,
+    "ridge_ncorr": 0.018093022347174074,
+    "ensemble_a_ncorr": 0.0281259671669812,
+    "ensemble_b_ncorr": 0.027950701940671407,
+    "evidence_scope": "repeated Research Validation OOF; not independent final validation",
+    "statistical_significance_established": false,
+    "causality_established": false
+  }
+}

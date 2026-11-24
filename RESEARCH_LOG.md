@@ -859,3 +859,34 @@ A-minus-Medium mean/median/std is `+0.002005`/`+0.001872`/`0.005762`, wins 63.94
 B-minus-A mean/median/std is `-0.000175`/`-0.000088`/`0.003762`, with 49.09% wins, P10/P90 `-0.004929`/`+0.004824`, largest gain/loss `+0.010165`/`-0.011076`, and 8.93% top-ten share. Its fold differences are negative except Fold 4 (`+0.001771`). Annual differences are negative in 2019, 2020, 2023, and partial 2025; positive in 2021, 2022, and especially 2024 (`+0.003675`). The fixed 20% Ridge allocation therefore does not add full-period mean NCORR, though it improves 2024 and slightly raises the overall mean/std ratio.
 
 This is saved-OOF Research Validation evidence, not dependence-aware significance inference or a final V1 selection. The policies were designed after earlier OOF and diversity observations, so repeated-validation selection bias remains. No extra weight, model, feature set, NMMC/NBMC proxy, or holdout evaluation was attempted. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 21C: Frozen v6 V1 Research Policy
+
+Frozen `numerai_classic_v6_v1` in `docs/manifests/v6.0_v1_policy.json`. V1 is `medium_top250_rank_equal_v1`: official Medium-350 LightGBM plus a freshly selected `medium_top250_abs_mean_ic_v1` LightGBM, per-date average-rank normalized and weighted 0.50/0.50. Both retain the baseline LightGBM parameters, seed 42, native missing handling, official feature order, Jupiter-60 target, 16-date purge, official NCORR identity, and separate Legacy CORR label. The freeze applies to the selection algorithm, not any saved fold-specific list. Ridge is excluded.
+
+The decision uses saved evidence only. Medium materially beat Small; Top-250 was comparable to Medium; standalone IC and LightGBM Gain showed different feature properties; Ensemble A improved mean NCORR against both components; and adding 20% Ridge slightly lowered the full-period mean. A was preferred for its `0.028126` Research OOF mean, paired gains of `+0.002005` versus Medium and `+0.001799` versus Top-250, and modest operational complexity. It remains temporally imperfect, including losses to Medium in Fold 1/2019 and Top-250 in Fold 5/2024–partial-2025. No causal or dependence-aware significance claim exists, repeated-validation selection bias remains, and historical NMMC/NBMC references are unavailable.
+
+Target-free date inspection confirmed training cutoff 2025-04-25, a 16-date/107,987-row gap from 2025-05-02 through 2025-08-15, a sealed 52-date/365,363-row holdout from 2025-08-22 through 2026-08-14, and 13 excluded immature dates through 2026-11-13. No holdout target column was read.
+
+Task 22A must implement a two-phase final protocol. Preparation must recompute training-only IC through 2025-04-25—the existing audit ends 2024-08-30—select Top-250, train two fresh fixed LightGBMs, and persist models, selection manifest, both component predictions, equal-rank ensemble predictions, and identity checks before targets can be opened. A distinct authorization step may then score the immutable predictions on the holdout. No holdout-driven feature choice, parameter change, weight optimization, or replacement model is allowed.
+
+Predeclared reporting includes NCORR mean, std, mean/std, positive rate, worst week, P10, Legacy CORR, component diagnostics, identity integrity, and period-qualified comparison with Research OOF. No arbitrary threshold is imposed. Weak evidence must be reported honestly; any later work informed by the holdout is a new development phase rather than independent validation. No model, IC, prediction, target, or score was produced in Task 21C. The final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 22A: Sealed Final-Holdout Infrastructure
+
+Implemented dedicated final-training, IC-extension, preparation, authorization, scoring-reference, artifact-state, and reporting primitives using synthetic fixtures only. Final training rejects rows after 2025-04-25 and null targets; holdout preparation rejects every target column and requires the frozen 52 dates. Provenance-compatible IC observations can be reused, but complete coverage through the cutoff is mandatory before deterministic Top-250 selection.
+
+The preparation state copies and hashes the frozen policy, final feature manifest, two model files, both component predictions, and the fixed 50/50 rank ensemble. It records canonical identities, training/holdout coverage, Git state, and zero target columns accessed. Scoring requires a separate explicit authorization, re-verifies every hash and the policy identity, rejects any prior scoring state, and only then permits the dedicated target loader. A holdout-only neutralizer loader preserves the ordinary Research OOF date prohibition while enabling the same official formula after authorization.
+
+Future commands are:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.final_holdout prepare --version v6.0 --evaluation-id v6_v1_final_001 --run --confirm-final-preparation
+.\.venv\Scripts\python.exe -B -m src.final_holdout score --version v6.0 --evaluation-id v6_v1_final_001 --run --authorize-holdout-target-access --confirm-final-scoring
+```
+
+Real command execution remains disabled until Task 22B separately reviews and wires the runner. This task performed no real model fit, IC calculation, holdout prediction, target access, or scoring. Software state and hash checks reduce accidental leakage and mutation but cannot prevent deliberate bypass by someone with direct filesystem access. Existing experiments and the frozen V1 manifest were not modified. The final holdout remains sealed.

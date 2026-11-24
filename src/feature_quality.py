@@ -276,6 +276,57 @@ def build_fold_feature_quality_summaries(
     }
 
 
+def build_final_training_ic_summary(
+    existing_ic: pd.DataFrame,
+    additional_ic: pd.DataFrame,
+    features: list[str],
+    eligible_dates: list[str],
+    source_metadata: dict,
+) -> pd.DataFrame:
+    """Merge provenance-compatible IC rows and summarize the frozen cutoff."""
+    config = get_research_config("v6.0")
+    expected_definition = (
+        "Per-date cross-sectional Spearman correlation: Pearson correlation "
+        "of pairwise-complete average ranks."
+    )
+    if source_metadata.get("dataset_version") != "v6.0":
+        raise ValueError("Final IC source dataset version is incompatible.")
+    if source_metadata.get("target") != config.target_column:
+        raise ValueError("Final IC source target is incompatible.")
+    if source_metadata.get("ordered_feature_names") != features:
+        raise ValueError("Final IC source feature identity is incompatible.")
+    if source_metadata.get("ic_definition") != expected_definition:
+        raise ValueError("Final IC definition is incompatible.")
+    eligible = sorted(str(date) for date in eligible_dates)
+    if not eligible or eligible[-1] != config.research_end:
+        raise ValueError("Final IC dates must end at the frozen cutoff.")
+    if any(date >= config.holdout_gap_start for date in eligible):
+        raise ValueError("Final IC dates include protected observations.")
+    combined = pd.concat([existing_ic, additional_ic], ignore_index=True)
+    _validate_ic_frame(combined, features)
+    expected = {(date, feature) for date in eligible for feature in features}
+    actual = set(zip(combined["date"].astype(str), combined["feature"].astype(str)))
+    if actual != expected:
+        raise ValueError("Final IC coverage is incomplete or contains later dates.")
+    valid = combined[combined["status"].eq(VALID_IC_STATUS)]
+    rows = []
+    for feature in features:
+        values = valid.loc[valid["feature"].eq(feature), "ic"].astype(float)
+        mean = float(values.mean()) if len(values) else np.nan
+        rows.append(
+            {
+                "feature": feature,
+                "train_start": eligible[0],
+                "train_end": eligible[-1],
+                "training_dates": len(eligible),
+                "valid_dates": int(len(values)),
+                "mean_ic": mean,
+                "absolute_mean_ic": abs(mean) if np.isfinite(mean) else np.nan,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _validate_analysis_id(analysis_id: str) -> None:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", analysis_id):
         raise ValueError("Analysis ID contains unsupported characters.")

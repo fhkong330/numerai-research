@@ -275,3 +275,55 @@ def summarize_fold_manifest_stability(
             for fold_id, selected in enumerate(selected_sets, start=1)
         ],
     }
+
+
+def select_final_top250(
+    summary: pd.DataFrame,
+    official_medium_features: list[str],
+) -> dict:
+    """Apply the frozen Top-250 algorithm at the final training cutoff."""
+    required = {"feature", "train_start", "train_end", "training_dates", "valid_dates", "mean_ic", "absolute_mean_ic"}
+    missing = sorted(required - set(summary.columns))
+    if missing:
+        raise ValueError(f"Final selection summary is missing columns: {missing}")
+    if len(official_medium_features) != SOURCE_FEATURE_COUNT or summary["feature"].tolist() != official_medium_features:
+        raise ValueError("Final selection requires the exact ordered Medium universe.")
+    if summary["feature"].duplicated().any() or len(summary) != SOURCE_FEATURE_COUNT:
+        raise ValueError("Final selection requires 350 unique feature rows.")
+    if set(summary["train_end"]) != {"2025-04-25"}:
+        raise ValueError("Final selection cutoff does not match the frozen policy.")
+    frame = summary.copy()
+    mean = pd.to_numeric(frame["mean_ic"], errors="coerce")
+    absolute = pd.to_numeric(frame["absolute_mean_ic"], errors="coerce")
+    eligible = frame["valid_dates"].gt(0) & np.isfinite(mean) & np.isfinite(absolute)
+    if not np.allclose(absolute[eligible], mean[eligible].abs(), atol=1e-15, rtol=0):
+        raise ValueError("Final selection IC statistics are inconsistent.")
+    frame["eligible"] = eligible
+    frame["ranking_absolute_mean_ic"] = absolute
+    ranked = frame.sort_values(
+        ["eligible", "ranking_absolute_mean_ic", "feature"],
+        ascending=[False, False, True],
+        na_position="last",
+        kind="stable",
+    ).reset_index(drop=True)
+    selected = ranked.head(SELECTED_FEATURE_COUNT)
+    if not selected["eligible"].all():
+        raise ValueError("Fewer than 250 final features have valid IC.")
+    ranked_names = selected["feature"].tolist()
+    selected_set = set(ranked_names)
+    model_names = [name for name in official_medium_features if name in selected_set]
+    return {
+        "policy_id": POLICY_ID,
+        "selected_feature_count": SELECTED_FEATURE_COUNT,
+        "source_feature_count": SOURCE_FEATURE_COUNT,
+        "train_start": str(summary["train_start"].iloc[0]),
+        "train_end": "2025-04-25",
+        "training_dates": int(summary["training_dates"].iloc[0]),
+        "selected_ranked": [
+            {"selection_rank": rank, "feature": name, "mean_ic": float(selected.iloc[rank - 1]["mean_ic"]), "absolute_mean_ic": float(selected.iloc[rank - 1]["absolute_mean_ic"])}
+            for rank, name in enumerate(ranked_names, 1)
+        ],
+        "model_feature_names": model_names,
+        "source_feature_list_sha256": feature_list_sha256(official_medium_features),
+        "selected_model_features_sha256": feature_list_sha256(model_names),
+    }

@@ -643,6 +643,34 @@ Calendar results show the same recent divergence. A–B mean Spearman is `0.7356
 
 Artifacts are saved under `outputs/v6.0/prediction_diversity/v6_three_model_diversity_001/` with metadata, completion marker, per-date correlations, fold and annual summaries, rank disagreement, decile overlap, and compact JSON summary. The analysis does not use targets, recalculate NCORR, train a model, or form an ensemble. Correlation alone does not demonstrate incremental alpha, useful complementarity, or an appropriate ensemble weight. The final holdout remains sealed.
 
+## Fixed-Weight Rank-Ensemble Contract
+
+Task 21A predeclares exactly two policies. `medium_top250_rank_equal_v1` weights `v6_medium_baseline_001` and `v6_medium_top250_ic_002` at 0.50 each. `medium_top250_ridge_rank_442_v1` weights those experiments and `v6_medium_ridge_003` at 0.40, 0.40, and 0.20. These values are fixed infrastructure inputs, not optimized weights. The first tests whether two related tree models benefit from equal rank averaging; the second gives a bounded 20% allocation to the less-correlated but weaker Ridge model without making a complementarity claim.
+
+Normalization occurs independently for every component and Research Validation date. Average ranks handle ties and the normalized value is `(rank - 0.5) / n`, where `n` is that date's row count. A constant component date maps every row to 0.5 and is recorded diagnostically. Construction selects only `date`, `numerai_ticker`, `composite_figi`, `fold_id`, and `prediction`; it rejects missing/non-finite predictions, duplicate or mismatched identities, mismatched metadata/scoring references, incorrect folds, and any date outside 2019-01-04 through 2025-04-25. Targets enter only the separately invoked approved scoring workflow.
+
+Future artifacts live under `outputs/v6.0/ensembles/<ensemble_id>/` and contain canonical ensemble predictions, metadata, component IDs and weights, normalization identity, source metadata/OOF hashes, Git state, and a completion marker. Scored runs additionally contain per-date and aggregate metrics. They explicitly contain no trained fold models and refuse overwrite. The existing comparison loader supports scored ensemble artifacts; unscored ensembles are rejected from performance comparison.
+
+Real execution requires both `--run` and `--confirm-real-scoring` and calls the existing official NCORR implementation, date-bounded neutralizers, and separately named Legacy CORR without changing formulas. It does not implement NMMC or NBMC. Task 21A ran only synthetic integration tests, so no ensemble performance result exists. Both policies are exposed to repeated Research Validation selection bias because their design followed prior OOF and diversity observations. The sealed holdout remains untouched.
+
+## Fixed-Rank Ensemble Evaluation
+
+Task 21B evaluated exactly the two predeclared policies. Ensemble A (`v6_medium_top250_rank_equal_001`) has mean NCORR `0.02812597`, std `0.01820897`, mean/std `1.5446`, 94.24% positive dates, mean Legacy CORR `0.02353895`, Legacy mean/std `1.4065`, worst weekly NCORR `-0.01409069`, and P10 `0.00488538`. Ensemble B (`v6_medium_top250_ridge_rank_442_002`) is `0.02795070`, `0.01801763`, `1.5513`, 93.03%, `0.02322010`, `1.4285`, `-0.01581489`, and `0.00517175` respectively.
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_rank_equal_v1 --ensemble-id v6_medium_top250_rank_equal_001 --run --confirm-real-scoring
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_ridge_rank_442_v1 --ensemble-id v6_medium_top250_ridge_rank_442_002 --run --confirm-real-scoring
+.\.venv\Scripts\python.exe -B -m src.analyze_ensembles --version v6.0
+```
+
+Ensemble A fold NCORR is `0.024286`, `0.033355`, `0.029916`, `0.025992`, and `0.023600`; annual NCORR for 2019–2025 is `0.027564`, `0.015281`, `0.043431`, `0.028616`, `0.037776`, `0.017699`, and `0.022296`. Ensemble B fold values are `0.022892`, `0.033225`, `0.029386`, `0.027763`, and `0.021608`; annual values are `0.025942`, `0.013976`, `0.044016`, `0.029258`, `0.035330`, `0.021374`, and `0.020306`. The weakest year for both is 2020, and the weakest fold is Fold 5 for both B and A, although A's Fold 1 is only slightly higher than Fold 5.
+
+Paired A-minus-Medium mean/median/std is `+0.002005`/`+0.001872`/`0.005762`, with 63.94% wins, P10/P90 `-0.004799`/`+0.009568`, largest improvement/decline `+0.015586`/`-0.019197`, and top-ten absolute-difference share 9.38%. A-minus-Top-250 is `+0.001799`/`+0.001441`/`0.006464`, 58.79%, `-0.006172`/`+0.009800`, `+0.022657`/`-0.014418`, and 10.53%. B-minus-A is `-0.000175`/`-0.000088`/`0.003762`, 49.09%, `-0.004929`/`+0.004824`, `+0.010165`/`-0.011076`, and 8.93%.
+
+The A-minus-Medium fold differences are `-0.001628`, `+0.003248`, `+0.002459`, `+0.003518`, `+0.003828`; A-minus-Top-250 is `+0.004158`, `+0.001751`, `+0.001663`, `+0.000162`, `-0.000528`. B-minus-A is `-0.001393`, `-0.000130`, `-0.000529`, `+0.001771`, `-0.001993`. Ridge's allocation helps 2024 (`+0.003675`) and modestly 2021–2022, but hurts 2019, 2020, 2023, and partial 2025, providing no full-period mean improvement over A.
+
+Both artifacts have exact source hashes, 2,180,295 finite canonical predictions over 330 dates, official neutralizer hash `1ae870b1…c6c6f`, and no model files or protected dates. Runs took about 4m04s and 3m43s and occupy 23.18 MB and 24.14 MB; peak memory was not measured reliably. No statistical-significance claim or final policy selection is made. Repeated use of the same Research Validation history creates selection bias, and the sealed holdout remains untouched.
+
 ## Remaining Validation-Design Questions
 
 The following research decisions remain open:

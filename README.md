@@ -366,6 +366,31 @@ No pair exceeds 0.9 on any date. A–B never falls below 0.5; A–C Pearson/Spea
 
 The ten lowest-agreement dates for the tree–Ridge pairs are concentrated mainly in 2024–2025, but their full-period standard deviations remain only `0.0156`–`0.0161` for Spearman, so disagreement is persistent as well as somewhat stronger recently. Lower prediction correlation does not imply higher NCORR, positive ensemble value, or an optimal weight. No ensemble, target analysis, or new performance result was produced, and the sealed holdout remains untouched.
 
+### Predeclared fixed-rank ensemble infrastructure
+
+Task 21A adds two fixed research policies without scoring either one: `medium_top250_rank_equal_v1` assigns 0.50/0.50 to Medium and Top-250 LightGBM, while `medium_top250_ridge_rank_442_v1` assigns 0.40/0.40/0.20 to Medium LightGBM, Top-250 LightGBM, and Ridge. For each component and date independently, tied predictions receive average ranks and normalization is exactly `(rank - 0.5) / n`; the normalized components are then combined with the predeclared weights. Constants therefore normalize to 0.5. No target, neutralization, or cross-date ranking enters construction.
+
+Future real scoring requires an explicit confirmation and uses the existing official NCORR and separately labeled Legacy CORR functions unchanged:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_rank_equal_v1 --ensemble-id v6_medium_top250_rank_equal_001 --run --confirm-real-scoring
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_ridge_rank_442_v1 --ensemble-id v6_medium_top250_ridge_rank_442_002 --run --confirm-real-scoring
+```
+
+The constructor requires exact canonical identities, approved dates and folds, matching dataset/target/scoring metadata, finite predictions, and complete source artifacts. Outputs use `outputs/v6.0/ensembles/<ensemble_id>/`, refuse overwrite, contain source hashes and no trained-model claim, and are compatible with saved-artifact comparison after scoring. Fixed weights avoid an additional weight search, but the policies were chosen after observing Research Validation results and diversity, so repeated-research selection bias remains. Task 21A generated no real ensemble predictions, scores, or performance claims; the final holdout remains sealed.
+
+Task 21B executed both commands exactly once. Ensemble A completed in about 4m04s and Ensemble B in about 3m43s; artifacts occupy 23,176,591 and 24,141,889 bytes. Reliable peak memory was not measured. Both contain 330 dates and 2,180,295 canonical identities, match their source hashes, and contain no models or protected dates.
+
+| Candidate | Mean NCORR | NCORR std | Mean/std | Positive | Legacy CORR | Legacy mean/std | Worst | P10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Medium | 0.026121 | 0.017981 | 1.4527 | 93.33% | 0.022410 | 1.3374 | -0.017041 | 0.004152 |
+| Top-250 | 0.026327 | 0.017714 | 1.4862 | 91.82% | 0.022576 | 1.3778 | -0.018754 | 0.003874 |
+| Ridge | 0.018093 | 0.017215 | 1.0510 | 85.76% | 0.015788 | 1.0149 | -0.031049 | -0.004783 |
+| Ensemble A | 0.028126 | 0.018209 | 1.5446 | 94.24% | 0.023539 | 1.4065 | -0.014091 | 0.004885 |
+| Ensemble B | 0.027951 | 0.018018 | 1.5513 | 93.03% | 0.023220 | 1.4285 | -0.015815 | 0.005172 |
+
+Ensemble A minus Medium has mean/median NCORR difference `+0.002005`/`+0.001872`, wins 63.94% of dates, and improves four of five folds; versus Top-250 it is `+0.001799`/`+0.001441`, wins 58.79%, and improves four folds but reverses slightly in Fold 5 and 2024–2025. Ensemble B minus A is `-0.000175`/`-0.000088`, wins 49.09%, and improves only Fold 4 materially; its 2024 gain is `+0.003675`, while 2019, 2020, 2023, and partial 2025 weaken. Thus the fixed Ridge allocation does not improve full-period mean NCORR, though it raises the mean/std ratio slightly and helps 2024. These are repeated Research Validation observations without dependence-aware significance inference, not a final V1 selection. The holdout remains sealed.
+
 The modeling pipeline separates reusable functionality into dedicated modules:
 
 - `data.py` — data loading and research-history construction

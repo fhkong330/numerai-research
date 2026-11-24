@@ -819,3 +819,43 @@ The lowest A–C agreement dates are concentrated mainly in early 2025; the lowe
 ### Interpretation and status
 
 Ridge predictions are materially less correlated with either LightGBM than the two LightGBMs are with each other, particularly recently. This is a diversity observation only. Low prediction correlation does not establish positive ensemble value, incremental alpha, or a valid weighting rule—especially because the Ridge baseline underperforms. Saved artifacts include 990 pair-date rows, fold/year summaries, rank and decile diagnostics, metadata, research summary, and a completion marker under `v6_three_model_diversity_001`. No new performance result or ensemble was produced, and the final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 21A: Fixed-Weight Rank-Ensemble Infrastructure
+
+### Predeclared policies
+
+Implemented exactly two policies before any real ensemble scoring. `medium_top250_rank_equal_v1` assigns 0.50 each to `v6_medium_baseline_001` and `v6_medium_top250_ic_002`. `medium_top250_ridge_rank_442_v1` assigns 0.40, 0.40, and 0.20 to those two LightGBMs and `v6_medium_ridge_003`. No weight optimization or additional candidate policy was introduced. Equal tree weights provide a simple controlled combination; the bounded Ridge weight reflects observed prediction diversity but does not assume that diversity adds performance.
+
+### Construction and safeguards
+
+Each source prediction is average-ranked separately within its date and normalized as `(rank - 0.5) / n`; constants map to 0.5. The weighted mean uses only canonical identity and prediction fields. The implementation rejects nonfinite predictions, invalid weights, duplicates, identity or fold mismatches, protected dates, target/scoring metadata mismatches, and incomplete artifacts. Canonical sorting makes physical Parquet order irrelevant. Construction records zero target columns accessed.
+
+Future outputs are non-overwriting directories under `outputs/v6.0/ensembles/` with component IDs and weights, source hashes, normalization and identity rules, canonical predictions, configuration/Git state, and a completion marker. They claim no trained models. Once explicitly scored, they also store per-date and aggregate metrics and can use the existing comparison tooling.
+
+### Scoring status and limitations
+
+The CLI requires `--run --confirm-real-scoring`. Its scoring boundary adds targets only after target-free ensemble construction and delegates to the existing official NCORR/date-bounded neutralizer and separately labeled Legacy CORR implementation. No formula, fold, purge, NMMC, or NBMC behavior changed. Synthetic tests verify this integration, but no saved real prediction was combined and no NCORR or Legacy CORR was calculated in Task 21A.
+
+Fixed policies reduce weight-search degrees of freedom but do not remove repeated Research Validation selection bias: their design follows observed model scores and diversity. Prediction diversity alone is not evidence of incremental ensemble value. No real ensemble result exists, and the final holdout remains sealed.
+
+---
+
+## 2026-11-23 — Task 21B: Two Predeclared Fixed-Rank Ensembles
+
+Executed exactly the two Task 21A commands once. `v6_medium_top250_rank_equal_001` completed in about 4m04s; `v6_medium_top250_ridge_rank_442_002` completed in about 3m43s. Both use per-date `(average_rank - 0.5) / n`, official NCORR, and separately labeled Legacy CORR. Their 330 dates and 2,180,295 canonical identities exactly match the components; source hashes, weights, scoring references, and folds verify. Artifacts are 23,176,591 and 24,141,889 bytes. No model was trained, peak memory was not reliably measured, and no protected date was accessed.
+
+```powershell
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_rank_equal_v1 --ensemble-id v6_medium_top250_rank_equal_001 --run --confirm-real-scoring
+.\.venv\Scripts\python.exe -B -m src.ensemble --version v6.0 --policy medium_top250_ridge_rank_442_v1 --ensemble-id v6_medium_top250_ridge_rank_442_002 --run --confirm-real-scoring
+.\.venv\Scripts\python.exe -B -m src.analyze_ensembles --version v6.0
+```
+
+Across Medium, Top-250, Ridge, Ensemble A, and Ensemble B, mean NCORR is `0.026121`, `0.026327`, `0.018093`, `0.028126`, and `0.027951`; mean/std is `1.4527`, `1.4862`, `1.0510`, `1.5446`, and `1.5513`. Ensemble A has the highest mean and positive-date rate (94.24%); B has the highest mean/std and P10 but a slightly lower mean. Legacy CORR means are `0.022410`, `0.022576`, `0.015788`, `0.023539`, and `0.023220`.
+
+A-minus-Medium mean/median/std is `+0.002005`/`+0.001872`/`0.005762`, wins 63.94%, and has P10/P90 `-0.004799`/`+0.009568`. A-minus-Top-250 is `+0.001799`/`+0.001441`/`0.006464`, wins 58.79%, and has P10/P90 `-0.006172`/`+0.009800`. Improvements are not dominated by a few weeks: top-ten absolute shares are 9.38% and 10.53%, though A loses to Medium in Fold 1/2019 and to Top-250 in Fold 5/2024–2025.
+
+B-minus-A mean/median/std is `-0.000175`/`-0.000088`/`0.003762`, with 49.09% wins, P10/P90 `-0.004929`/`+0.004824`, largest gain/loss `+0.010165`/`-0.011076`, and 8.93% top-ten share. Its fold differences are negative except Fold 4 (`+0.001771`). Annual differences are negative in 2019, 2020, 2023, and partial 2025; positive in 2021, 2022, and especially 2024 (`+0.003675`). The fixed 20% Ridge allocation therefore does not add full-period mean NCORR, though it improves 2024 and slightly raises the overall mean/std ratio.
+
+This is saved-OOF Research Validation evidence, not dependence-aware significance inference or a final V1 selection. The policies were designed after earlier OOF and diversity observations, so repeated-validation selection bias remains. No extra weight, model, feature set, NMMC/NBMC proxy, or holdout evaluation was attempted. The final holdout remains sealed.

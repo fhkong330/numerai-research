@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.experiment_artifacts import load_v6_experiment_artifacts
+from src.ensemble import load_ensemble_artifacts
 from src.paths import OUTPUT_ROOT
 
 
@@ -26,24 +27,23 @@ def _validate_compatible(baseline: dict, candidate: dict) -> None:
 
     baseline_oof = baseline["oof_predictions"]
     candidate_oof = candidate["oof_predictions"]
-    required_oof = {*IDENTITY_COLUMNS, baseline_meta["target"]}
+    required_oof = set(IDENTITY_COLUMNS)
     for name, frame in (("baseline", baseline_oof), ("candidate", candidate_oof)):
         missing = sorted(required_oof - set(frame.columns))
         if missing:
             raise ValueError(f"{name} OOF is missing columns: {missing}")
-    baseline_identity = baseline_oof[IDENTITY_COLUMNS].reset_index(drop=True).astype(
-        "string"
-    )
-    candidate_identity = candidate_oof[IDENTITY_COLUMNS].reset_index(drop=True).astype(
-        "string"
-    )
+    baseline_order = baseline_oof.sort_values(IDENTITY_COLUMNS, na_position="first")
+    candidate_order = candidate_oof.sort_values(IDENTITY_COLUMNS, na_position="first")
+    baseline_identity = baseline_order[IDENTITY_COLUMNS].reset_index(drop=True).astype("string")
+    candidate_identity = candidate_order[IDENTITY_COLUMNS].reset_index(drop=True).astype("string")
     if not baseline_identity.equals(candidate_identity):
         raise ValueError("Experiment OOF row identities or ordering do not match.")
     target = baseline_meta["target"]
-    if not np.array_equal(
-        baseline_oof[target].to_numpy(), candidate_oof[target].to_numpy(), equal_nan=True
-    ):
-        raise ValueError("Experiment OOF target values do not match.")
+    if target in baseline_oof and target in candidate_oof:
+        if not np.array_equal(
+            baseline_order[target].to_numpy(), candidate_order[target].to_numpy(), equal_nan=True
+        ):
+            raise ValueError("Experiment OOF target values do not match.")
 
     for name, experiment in (("baseline", baseline), ("candidate", candidate)):
         per_date = experiment["per_date_metrics"]
@@ -103,6 +103,8 @@ def compare_loaded_v6_experiments(baseline: dict, candidate: dict) -> dict:
     differences = paired["ncorr_difference"]
 
     def feature_count(metadata: dict) -> int:
+        if metadata.get("artifact_type") == "ensemble":
+            return 0
         selection = metadata.get("feature_selection")
         return (
             int(selection["selected_feature_count_per_fold"])
@@ -145,9 +147,27 @@ def compare_loaded_v6_experiments(baseline: dict, candidate: dict) -> dict:
 
 def compare_v6_experiment_paths(baseline_dir: Path, candidate_dir: Path) -> dict:
     return compare_loaded_v6_experiments(
-        load_v6_experiment_artifacts(baseline_dir),
-        load_v6_experiment_artifacts(candidate_dir),
+        load_comparable_v6_artifacts(baseline_dir),
+        load_comparable_v6_artifacts(candidate_dir),
     )
+
+
+def load_comparable_v6_artifacts(path: Path) -> dict:
+    """Load either a completed experiment or a scored ensemble."""
+    metadata_path = path / "metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError(f"Artifact metadata not found: {metadata_path}")
+    with metadata_path.open(encoding="utf-8") as file:
+        metadata = json.load(file)
+    if metadata.get("artifact_type") != "ensemble":
+        return load_v6_experiment_artifacts(path)
+    ensemble = load_ensemble_artifacts(path, require_scored=True)
+    return {
+        "metadata": ensemble["metadata"],
+        "metrics": ensemble["metrics"],
+        "oof_predictions": ensemble["predictions"],
+        "per_date_metrics": ensemble["per_date_metrics"],
+    }
 
 
 def main(argv: list[str] | None = None) -> None:
